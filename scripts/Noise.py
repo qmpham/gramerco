@@ -46,17 +46,34 @@ class Spacy():
         return toks
 
 class Lexicon():
-    def __init__(self, f):
+    def __init__(self,f):
         self.mot2linf = defaultdict(list)
         self.lem2lmot = defaultdict(list)
         with open(f) as fd:
-            for l in fd:
-                mot, lem_inf = l.rstrip().split('\t')
-                lem_inf = lem_inf.split(separ) #[lem,VER,ind,pres,1s]
-                assert len(lem_inf) >= 2, 'bad lexicon input: {}'.format(l) #at least lem and pos
-                lem = lem_inf[0]
-                self.mot2linf[mot].append(lem_inf) #mot => [[lem,VER,ind,pres,1s], [lem,VER,ind,pres,3p]]
-                self.lem2lmot[lem].append(mot)
+            for l in sys.stdin: 
+                toks = l.rstrip().split('\t')
+                mot, lemma, cgram, genre, nombre, infover = toks[0].raplace(' ',space), toks[2].raplace(' ',space), toks[3], toks[4], toks[5], toks[10]
+                #mot = mot.replace(' ',space)
+                #lemma = lemma.replace(' ',space)
+                if not genre:
+                    genre = '-'
+                if not nombre:
+                    nombre = '-'
+
+                if cgram == 'VER' or cgram == 'AUX':
+                    for v in infover.split(';'):
+                        if len(v):
+                            val = separ.join([lemma, cgram, genre, nombre, v])
+                            #print('{}\t{}'.format(mot,val))
+                            self.mot2linf[mot].append(val)
+                            self.lem2lmot[lemma].append(mot)
+                    
+                elif cgram == 'NOM' or  cgram == 'ADV' or cgram == 'PRE' or cgram == 'ONO' or cgram == 'CON' or cgram.startswith('PRO') or cgram.startswith('ADJ') or cgram.startswith('ART'):
+                    val = separ.join([lemma, cgram, genre, nombre])
+                    #print('{}\t{}'.format(mot,val))
+                    self.mot2linf[mot].append(val)
+                    self.lem2lmot[lemma].append(mot)
+
         self.lmot = list(self.mot2linf.keys())
         sys.stderr.write('READ {} words and {} lemmas from {}\n'.format(len(self.mot2linf), len(self.lem2lmot), f))
 
