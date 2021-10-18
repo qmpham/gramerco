@@ -222,7 +222,7 @@ class Noise():
     def do_delete(self, i): ### NOISY: 'i want to|DELETE to go' CORRECT: '0:i 1:want 2:to 3:go'
         if self.seen['delete']:
             return
-        self.toks.insert(i, Tok(self.toks[i].txt, False, tag="DELETE") ) ## after insert(2)
+        self.toks.insert(i, Tok(self.toks[i].txt, False, tag="$DELETE") ) ## after insert(2)
         self.output(i)
         self.seen['delete'] += 1
         
@@ -238,7 +238,7 @@ class Noise():
         if not txt_new:
             return
         ### replace txt, tag of element i-1 avec REPLACE_tok[i]
-        self.toks[i].modify(txt_new, tag='REPLACE_'+txt_old)
+        self.toks[i].modify(txt_new, tag='$REPLACE_'+txt_old)
         self.output(i)
         self.seen['replace'] += 1
             
@@ -255,7 +255,7 @@ class Noise():
         if not self.appends.is_an_append(self.toks[i+1].txt): #toks[i+1] is 'to'
             return
         ### remove element i+1 replace tag of element i avec APPEND_tok[i+1]
-        self.toks[i].modify(self.toks[i].txt, tag='APPEND_'+self.toks[i+1].txt)
+        self.toks[i].modify(self.toks[i].txt, tag='$APPEND_'+self.toks[i+1].txt)
         self.toks.pop(i+1)
         self.output(i)
         self.seen['append'] += 1
@@ -272,7 +272,7 @@ class Noise():
             return
         txt_curr = self.toks[i].txt
         txt_next = self.toks[i+1].txt
-        self.toks[i].modify(txt_next,tag='SWAP')
+        self.toks[i].modify(txt_next,tag='$SWAP')
         self.toks[i+1].modify(txt_curr,tag=keep)
         self.output(i)
         self.seen['swap'] += 1
@@ -289,7 +289,7 @@ class Noise():
         ls = self.toks[i].txt[:k]
         rs = self.toks[i].txt[k:]
         self.toks[i].modify(''.join(rs), tag=keep)
-        self.toks.insert(i,Tok(''.join(ls), False, tag='MERGE'))
+        self.toks.insert(i,Tok(''.join(ls), False, tag='$MERGE'))
         self.output(i)
         self.seen['merge'] += 1
         
@@ -305,7 +305,7 @@ class Noise():
         first = self.toks[i].txt[:p]
         second = self.toks[i].txt[p+1:]
         self.toks[i].modify(second, tag=keep)
-        self.toks.insert(i,Tok(first, False, tag='HYPHEN'))
+        self.toks.insert(i,Tok(first, False, tag='$HYPHEN'))
         self.output(i)
         self.seen['hyphen'] += 1
         
@@ -319,7 +319,7 @@ class Noise():
             return
         if not self.toks[i].txt.isalpha() or not self.toks[i+1].txt.isalpha():
             return
-        self.toks[i].modify(self.toks[i].txt+'-'+self.toks[i+1].txt, tag='SPLIT')
+        self.toks[i].modify(self.toks[i].txt+'-'+self.toks[i+1].txt, tag='$SPLIT')
         self.toks.pop(i+1)
         self.output(i)
         self.seen['split'] += 1
@@ -335,7 +335,7 @@ class Noise():
         first = self.toks[i].txt[0]
         rest = self.toks[i].txt[1:]
         first = first.upper() if first.islower() else first.lower()
-        self.toks[i].modify(first + rest, tag='CASE')
+        self.toks[i].modify(first + rest, tag='$CASE')
         self.output(i)
         self.seen['case'] += 1
         
@@ -351,7 +351,7 @@ class Noise():
         txt_curr_other, tag_curr = self.lexicon.other_form(self.toks[i])
         if not txt_curr_other:
             return
-        self.toks[i].modify(txt_curr_other,tag=tag_curr)
+        self.toks[i].modify(txt_curr_other,tag='$'+tag_curr)
         self.output(i)
         self.seen['lexicon'] += 1
 
