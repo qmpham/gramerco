@@ -50,11 +50,9 @@ class Lexicon():
         self.mot2linf = defaultdict(list)
         self.lem2lmot = defaultdict(list)
         with open(f) as fd:
-            for l in sys.stdin: 
+            for l in fd: 
                 toks = l.rstrip().split('\t')
-                mot, lemma, cgram, genre, nombre, infover = toks[0].raplace(' ',space), toks[2].raplace(' ',space), toks[3], toks[4], toks[5], toks[10]
-                #mot = mot.replace(' ',space)
-                #lemma = lemma.replace(' ',space)
+                mot, lemma, cgram, genre, nombre, infover = toks[0].replace(' ',space), toks[2].replace(' ',space), toks[3], toks[4], toks[5], toks[10]
                 if not genre:
                     genre = '-'
                 if not nombre:
@@ -63,13 +61,13 @@ class Lexicon():
                 if cgram == 'VER' or cgram == 'AUX':
                     for v in infover.split(';'):
                         if len(v):
-                            val = separ.join([lemma, cgram, genre, nombre, v])
+                            val = [lemma, cgram, genre, nombre, v]
                             #print('{}\t{}'.format(mot,val))
                             self.mot2linf[mot].append(val)
                             self.lem2lmot[lemma].append(mot)
                     
                 elif cgram == 'NOM' or  cgram == 'ADV' or cgram == 'PRE' or cgram == 'ONO' or cgram == 'CON' or cgram.startswith('PRO') or cgram.startswith('ADJ') or cgram.startswith('ART'):
-                    val = separ.join([lemma, cgram, genre, nombre])
+                    val = [lemma, cgram, genre, nombre]
                     #print('{}\t{}'.format(mot,val))
                     self.mot2linf[mot].append(val)
                     self.lem2lmot[lemma].append(mot)
@@ -158,10 +156,11 @@ class Noise():
         self.counts = defaultdict(int)
         
     def add(self, toks):
+        self.toks = toks #list of Tok
         self.n_attempts = 0
         self.n_changes = 0
-        self.toks = toks #list of Tok
-        self.output(-1)
+        self.output(-1) ### prints without noise
+        self.seen = defaultdict(int)
         while self.n_attempts < self.args.max_tokens+5 and self.n_changes < self.args.max_tokens:
             self.n_attempts += 1
             i = random.randint(0,len(self.toks)-1) ### may be repeated
@@ -221,10 +220,15 @@ class Noise():
                 
 
     def do_delete(self, i): ### NOISY: 'i want to|DELETE to go' CORRECT: '0:i 1:want 2:to 3:go'
+        if self.seen['delete']:
+            return
         self.toks.insert(i, Tok(self.toks[i].txt, False, tag="DELETE") ) ## after insert(2)
         self.output(i)
+        self.seen['delete'] += 1
         
     def do_replace(self, i): ### NOISY: 'i can|REPLACE_want to go' CORRECT: 'i want to go'
+        if self.seen['replace']:
+            return
         if self.replacements is None:
             return
         if not self.toks[i].original:
@@ -236,9 +240,12 @@ class Noise():
         ### replace txt, tag of element i-1 avec REPLACE_tok[i]
         self.toks[i].modify(txt_new, tag='REPLACE_'+txt_old)
         self.output(i)
+        self.seen['replace'] += 1
             
     def do_append(self, i): ### NOISY: 'i want|APPEND_to go' CORRECT: 'i want to go'
         ### append_by(to) => True (delete to)
+        if self.seen['append']:
+            return
         if self.appends is None:
             return
         if i == len(self.toks) - 1:
@@ -251,9 +258,12 @@ class Noise():
         self.toks[i].modify(self.toks[i].txt, tag='APPEND_'+self.toks[i+1].txt)
         self.toks.pop(i+1)
         self.output(i)
+        self.seen['append'] += 1
         
     def do_swap(self, i): ### NOISY: 'i to|SWAP want go' CORRECT: 'i want to go'
         ### swap with next 
+        if self.seen['swap']:
+            return
         if i == len(self.toks) - 1:
             return
         if not self.toks[i].original or not self.toks[i+1].original:
@@ -265,9 +275,12 @@ class Noise():
         self.toks[i].modify(txt_next,tag='SWAP')
         self.toks[i+1].modify(txt_curr,tag=keep)
         self.output(i)
+        self.seen['swap'] += 1
         
     def do_merge(self, i): ### NOISY: 'i wa|MERGE nt to go' CORRECT: 'i want to go'
         ### merge two tokens
+        if self.seen['merge']:
+            return
         if not self.toks[i].original:
             return
         if not self.toks[i].txt.isalpha() or len(self.toks[i].txt) < 2:
@@ -275,12 +288,15 @@ class Noise():
         k = random.randint(1,len(self.toks[i].txt)-1)
         ls = self.toks[i].txt[:k]
         rs = self.toks[i].txt[k:]
-        self.toks[i].modify(''.join(rs), keep)
+        self.toks[i].modify(''.join(rs), tag=keep)
         self.toks.insert(i,Tok(''.join(ls), False, tag='MERGE'))
         self.output(i)
+        self.seen['merge'] += 1
         
     def do_hyphen(self, i): ### NOISY: 'work in depth' CORRECT: 'work in-depth'
         ### merge with an hyphen
+        if self.seen['hyphen']:
+            return
         if not self.toks[i].original:
             return
         p = self.toks[i].txt.find('-',1,len(self.toks[i].txt)-1)
@@ -288,12 +304,15 @@ class Noise():
             return
         first = self.toks[i].txt[:p]
         second = self.toks[i].txt[p+1:]
-        self.toks[i].modify(second, keep)
+        self.toks[i].modify(second, tag=keep)
         self.toks.insert(i,Tok(first, False, tag='HYPHEN'))
         self.output(i)
+        self.seen['hyphen'] += 1
         
     def do_split(self, i): ### NOISY: 'i want-to|SPLIT go' CORRECT: 'i want to go'
         ### split an hyphen
+        if self.seen['split']:
+            return
         if i == len(self.toks) - 1:
             return
         if not self.toks[i].original or not self.toks[i+1].original:
@@ -303,30 +322,37 @@ class Noise():
         self.toks[i].modify(self.toks[i].txt+'-'+self.toks[i+1].txt, tag='SPLIT')
         self.toks.pop(i+1)
         self.output(i)
+        self.seen['split'] += 1
                 
     def do_case(self, i): ### NOISY: 'i|CASE want to go' CORRECT: 'I want to go'
         ### change the case of the first char
+        if self.seen['case']:
+            return
         if not self.toks[i].original:
             return
-        if not self.toks[i].txt[0].isalpha():
+        if not self.toks[i].txt.isalpha():
             return
         first = self.toks[i].txt[0]
         rest = self.toks[i].txt[1:]
         first = first.upper() if first.islower() else first.lower()
         self.toks[i].modify(first + rest, tag='CASE')
         self.output(i)
+        self.seen['case'] += 1
         
     def do_lexicon(self, i): ### NOISY: 'i wants|VER:ind:pre:1s to go' CORRECT: 'i want to go'
+        if self.seen['lexicon']:
+            return
         if self.lexicon is None:
             return
         if not self.toks[i].original:
             return
-        if not self.toks[i].txt[0].isalpha():
+        if not self.toks[i].txt.isalpha():
             return
         txt_curr_other, tag_curr = self.lexicon.other_form(self.toks[i])
         if not txt_curr_other:
             return
         self.toks[i].modify(txt_curr_other,tag=tag_curr)
         self.output(i)
+        self.seen['lexicon'] += 1
 
         
