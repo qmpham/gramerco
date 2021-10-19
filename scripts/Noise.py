@@ -13,6 +13,56 @@ keep = '·'
 ################################################################################################
 ################################################################################################
 
+def convert_pos_genre_nombre(spacy_pos, spacy_inf):
+    ### pos ######
+    if spacy_pos == 'VERB': pos = 'VER'
+    elif spacy_pos == 'AUX': pos = 'AUX'
+    elif spacy_pos == 'ADJ': pos = 'ADJ'
+    elif spacy_pos == 'NOUN': pos = 'NOM'
+    else:
+        print('unresolved pos={}'.format(spacy_pos))
+        sys.exit()
+    ### genre ####
+    if 'Gender=Fem' in spacy_inf: genre='f'
+    elif 'Gender=Masc' in spacy_inf: genre='m'
+    else: genre='-'
+    ### nombre ###
+    if 'Number=Sing' in spacy_inf: nombre='s'
+    elif 'Number=Plur' in spacy_inf: nombre='p'
+    else: nombre='-'
+    return pos, genre, nombre
+
+def convert_inf(spacy_inf):
+    inf = []
+    return inf
+
+def spacy2lexicon(tok, linf): #from spacy: tok decider lequel dans linf s'approche le plus: linf=[cgram, genre, nombre, v]
+    spacy_txt = tok.txt #saisit
+    spacy_lem = tok.lem #saisir
+    spacy_pos = tok.pos #VERB
+    spacy_inf = tok.inf #Mood=Ind￨Number=Sing￨Person=3￨Tense=Past￨VerbForm=Fin
+    #linf is [['saisir', 'VER', '-', '-', 'ind￨pre￨3s'], ['saisir', 'VER', '-', '-', 'ind￨pas￨3s']]
+    #print('(spacy_txt, spacy_pos, spacy_inf) = ({}, {}, {})\tlexic_linf = {}'.format(spacy_txt,spacy_pos,spacy_inf,linf))
+
+    inf_curr = []
+    pos, genre, nombre = convert_pos_genre_nombre(spacy_pos, spacy_inf)
+    inf_curr.append(pos)
+    inf_curr.append(genre)
+    inf_curr.append(nombre)    
+    if pos == 'VER' or pos == 'AUX':
+        inf = convert_inf(spacy_inf)
+        inf_curr.append(inf)
+        
+    if inf_curr in linf:
+        print('inf_curr = {}'.format(separ.join(inf_curr)))
+    else:
+        print('inf_curr = {} linf = {}'.format(separ.join(inf_curr),linf))
+
+    return inf_curr #[lem, pos, genre, nombre, inf]
+
+
+
+
 class Tok():
     def __init__(self, txt, original, lem='', pos='', inf='', tag=''):
         self.txt = txt
@@ -40,7 +90,7 @@ class Spacy():
             txt = token.text.replace(' ',space)
             lem = token.lemma_.replace(' ',space)
             pos = str(token.pos_)
-            inf = str(token.morph).replace(':',separ)
+            inf = str(token.morph).replace('|',separ)
             #token.tag_, #token.dep_, #token.shape_, #token.is_alpha, #token.is_stop
             toks.append(Tok(txt,True,lem=lem,pos=pos,inf=inf,tag=keep))
         return toks
@@ -52,7 +102,7 @@ class Lexicon():
         with open(f) as fd:
             for l in fd: 
                 toks = l.rstrip().split('\t')
-                mot, lemma, cgram, genre, nombre, infover = toks[0].replace(' ',space), toks[2].replace(' ',space), toks[3], toks[4], toks[5], toks[10]
+                mot, lemma, cgram, genre, nombre, infover = toks[0].replace(' ',space), toks[2].replace(' ',space), toks[3], toks[4], toks[5], toks[10].replace(':',separ)
                 if not genre:
                     genre = '-'
                 if not nombre:
@@ -61,16 +111,22 @@ class Lexicon():
                 if cgram == 'VER' or cgram == 'AUX':
                     for v in infover.split(';'):
                         if len(v):
-                            val = [lemma, cgram, genre, nombre, v]
-                            #print('{}\t{}'.format(mot,val))
-                            self.mot2linf[mot].append(val)
+                            inf = [lemma, cgram, genre, nombre, v]
+                            print('{}\t{}'.format(mot,inf))
+                            self.mot2linf[mot].append(inf)
                             self.lem2lmot[lemma].append(mot)
                     
-                elif cgram == 'NOM' or  cgram == 'ADV' or cgram == 'PRE' or cgram == 'ONO' or cgram == 'CON' or cgram.startswith('PRO') or cgram.startswith('ADJ') or cgram.startswith('ART'):
-                    val = [lemma, cgram, genre, nombre]
-                    #print('{}\t{}'.format(mot,val))
-                    self.mot2linf[mot].append(val)
+                elif cgram == 'NOM' or  cgram == 'ADJ':
+                    inf = [lemma, cgram, genre, nombre]
+                    print('{}\t{}'.format(mot,inf))
+                    self.mot2linf[mot].append(inf)
                     self.lem2lmot[lemma].append(mot)
+                    
+#                elif cgram == 'NOM' or  cgram == 'ADV' or cgram == 'PRE' or cgram == 'ONO' or cgram == 'CON' or cgram.startswith('PRO') or cgram.startswith('ADJ') or cgram.startswith('ART'):
+#                    inf = [lemma, cgram, genre, nombre]
+#                    #print('{}\t{}'.format(mot,inf))
+#                    self.mot2linf[mot].append(inf)
+#                    self.lem2lmot[lemma].append(mot)
 
         self.lmot = list(self.mot2linf.keys())
         sys.stderr.write('READ {} words and {} lemmas from {}\n'.format(len(self.mot2linf), len(self.lem2lmot), f))
@@ -90,10 +146,15 @@ class Lexicon():
             
         linf = self.mot2linf[txt_curr]
         #print('\tlinf={}'.format(linf))
-        if len(linf) != 1:
-            return '', ''
 
-        inf_curr = linf[0]
+        #if len(linf) != 1:
+        #    return '', ''
+        #inf_curr = linf[0]
+
+        inf_curr = spacy2lexicon(tok,linf) #from spacy: tok.pos, tok.inf decider lequel dans linf s'approche le plus: linf=[cgram, genre, nombre, v]
+        if inf_curr not in linf:        
+            return '', ''
+        
         #print('inf_curr={}'.format(inf_curr))
         lem_curr = inf_curr[0]
         tag_curr = separ.join(inf_curr[1:])
@@ -347,6 +408,8 @@ class Noise():
         if not self.toks[i].original:
             return
         if not self.toks[i].txt.isalpha():
+            return
+        if self.toks[i].pos != 'VER' and self.toks[i].pos != 'NOM' and self.toks[i].pos != 'ADJ':
             return
         txt_curr_other, tag_curr = self.lexicon.other_form(self.toks[i])
         if not txt_curr_other:
