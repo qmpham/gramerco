@@ -56,13 +56,15 @@ def do_lexicon(toks, tags, lex_rep):
         return tag
     return ''
 
-def do_delete(toks, dic, tags):
-    ### insert a random word in a random position
+def do_delete(toks, tags, dic):
+    ### insert a random word in a random position (consider inserting a copy of the previous)
     if len(dic['txt']) == 0:
         return ''
     idxs = list(range(len(toks)))
     random.shuffle(idxs)
     for idx in idxs:
+        if tags[idx] != keep:
+            continue
         txt_new = random.choices(dic['txt'],weights=dic['frq'],k=1)[0]
         if toks[idx] == txt_new:
             continue
@@ -70,6 +72,22 @@ def do_delete(toks, dic, tags):
         toks.insert(idx,txt_new)
         tags.insert(idx,tag_new)
         return tag_new
+    return ''
+
+def do_copy(toks, tags):
+    ### copy a word and tag the first as COPY
+    if len(dic['txt']) == 0:
+        return ''
+    idxs = list(range(len(toks)))
+    random.shuffle(idxs)
+    for idx in idxs:
+        if tags[idx] != keep:
+            continue
+        if not toks[idx].isalpha():
+            continue
+        toks.insert(idx,toks[idx])
+        tags.insert(idx,'$COPY')
+        return tags[idx]
     return ''
 
 def do_replace(toks, tags, rep):
@@ -243,7 +261,16 @@ def noise_line(toks,lex,dic,rep,app,seen,args):
         p += args.p_app
 
         if p <= r < p+args.p_del: ### DELETE #######################
-            tag = do_delete(toks, dic, tags)
+            tag = do_delete(toks, tags, dic)
+            if tag:
+                output(toks, tags)
+                seen[tag] += 1
+                n_changes += 1
+            continue
+        p += args.p_del
+
+        if p <= r < p+args.p_cop: ### COPY #######################
+            tag = do_copy(toks, tags)
             if tag:
                 output(toks, tags)
                 seen[tag] += 1
@@ -348,6 +375,7 @@ if __name__ == '__main__':
     parser.add_argument('--p_app', type=float, default=0.05, help='Prob of appending one token (def 0.05) [to use with -app]')
     parser.add_argument('--p_rep', type=float, default=0.05, help='Prob of replacing one token (def 0.05) [to use with -rep]')
     parser.add_argument('--p_del', type=float, default=0.01, help='Prob of deleting one token (def 0.01)')
+    parser.add_argument('--p_cop', type=float, default=0.01, help='Prob of copying one token (def 0.01)')
     parser.add_argument('--p_mer', type=float, default=0.01, help='Prob of merging two tokens (def 0.01)')
     parser.add_argument('--p_spl', type=float, default=0.01, help='Prob of splitting one token (def 0.01)')
     parser.add_argument('--p_hyp', type=float, default=0.01, help='Prob of joining two tokens with an hyphen (def 0.01)')
