@@ -4,81 +4,18 @@
 import random
 import sys
 import spacy
+import logging
 from collections import defaultdict
 separ = '￨' ### separator for output
 space = '~' ### replaces space by this on Spacy txt/lem tokens
 keep = '·'
 
-################################################################################################
-################################################################################################
-################################################################################################
-
-def convert_pos_genre_nombre(spacy_pos, spacy_inf):
-    ### pos ######
-    if spacy_pos == 'VERB': pos = 'VER'
-    elif spacy_pos == 'AUX': pos = 'AUX'
-    elif spacy_pos == 'ADJ': pos = 'ADJ'
-    elif spacy_pos == 'NOUN': pos = 'NOM'
-    else:
-        print('unresolved pos={}'.format(spacy_pos))
-        sys.exit()
-    ### genre ####
-    if 'Gender=Fem' in spacy_inf: genre='f'
-    elif 'Gender=Masc' in spacy_inf: genre='m'
-    else: genre='-'
-    ### nombre ###
-    if 'Number=Sing' in spacy_inf: nombre='s'
-    elif 'Number=Plur' in spacy_inf: nombre='p'
-    else: nombre='-'
-    return pos, genre, nombre
-
-def convert_inf(spacy_inf):
-    inf = []
-    return inf
-
-def spacy2lexicon(tok, linf): #from spacy: tok decider lequel dans linf s'approche le plus: linf=[cgram, genre, nombre, v]
-    spacy_txt = tok.txt #saisit
-    spacy_lem = tok.lem #saisir
-    spacy_pos = tok.pos #VERB
-    spacy_inf = tok.inf #Mood=Ind￨Number=Sing￨Person=3￨Tense=Past￨VerbForm=Fin
-    #linf is [['saisir', 'VER', '-', '-', 'ind￨pre￨3s'], ['saisir', 'VER', '-', '-', 'ind￨pas￨3s']]
-    #print('(spacy_txt, spacy_pos, spacy_inf) = ({}, {}, {})\tlexic_linf = {}'.format(spacy_txt,spacy_pos,spacy_inf,linf))
-
-    inf_curr = []
-    pos, genre, nombre = convert_pos_genre_nombre(spacy_pos, spacy_inf)
-    inf_curr.append(pos)
-    inf_curr.append(genre)
-    inf_curr.append(nombre)    
-    if pos == 'VER' or pos == 'AUX':
-        inf = convert_inf(spacy_inf)
-        inf_curr.append(inf)
-        
-    if inf_curr in linf:
-        print('inf_curr = {}'.format(separ.join(inf_curr)))
-    else:
-        print('inf_curr = {} linf = {}'.format(separ.join(inf_curr),linf))
-
-    return inf_curr #[lem, pos, genre, nombre, inf]
-
-
-
-
 class Tok():
-    def __init__(self, txt, original, lem='', pos='', inf='', tag=''):
+    def __init__(self, txt, lem='', pos='', inf=''):
         self.txt = txt
-        self.original = original
         self.lem = lem
         self.pos = pos
         self.inf = inf
-        self.tag = tag
-
-    def modify(self, txt, lem= '', pos='', inf='', tag=''):
-        self.txt = txt
-        self.original = False
-        self.lem = lem
-        self.pos = pos
-        self.inf = inf
-        self.tag = tag
         
 class Spacy():
     def __init__(self):
@@ -92,13 +29,13 @@ class Spacy():
             pos = str(token.pos_)
             inf = str(token.morph).replace('|',separ)
             #token.tag_, #token.dep_, #token.shape_, #token.is_alpha, #token.is_stop
-            toks.append(Tok(txt,True,lem=lem,pos=pos,inf=inf,tag=keep))
+            toks.append(Tok(txt,lem=lem,pos=pos,inf=inf))
         return toks
 
 class Lexicon():
     def __init__(self,f):
-        self.mot2linf = defaultdict(list)
-        self.lem2lmot = defaultdict(list)
+        self.mot2linf = defaultdict(set)
+        self.lem2lmot = defaultdict(set)
         with open(f) as fd:
             for l in fd: 
                 toks = l.rstrip().split('\t')
@@ -109,313 +46,182 @@ class Lexicon():
                     nombre = '-'
 
                 if cgram == 'VER' or cgram == 'AUX':
+                    self.lem2lmot[lemma].add(mot)
                     for v in infover.split(';'):
                         if len(v):
-                            inf = [lemma, cgram, genre, nombre, v]
-                            print('{}\t{}'.format(mot,inf))
-                            self.mot2linf[mot].append(inf)
-                            self.lem2lmot[lemma].append(mot)
+                            inf = separ.join([cgram, genre, nombre, v])
+                            self.mot2linf[mot].add(inf)
                     
                 elif cgram == 'NOM' or  cgram == 'ADJ':
-                    inf = [lemma, cgram, genre, nombre]
-                    print('{}\t{}'.format(mot,inf))
-                    self.mot2linf[mot].append(inf)
-                    self.lem2lmot[lemma].append(mot)
-                    
+                    self.lem2lmot[lemma].add(mot)
+                    inf = separ.join([cgram, genre, nombre])
+                    self.mot2linf[mot].add(inf)
+
 #                elif cgram == 'NOM' or  cgram == 'ADV' or cgram == 'PRE' or cgram == 'ONO' or cgram == 'CON' or cgram.startswith('PRO') or cgram.startswith('ADJ') or cgram.startswith('ART'):
+#                    self.lem2lmot[lemma].append(mot)
 #                    inf = [lemma, cgram, genre, nombre]
 #                    #print('{}\t{}'.format(mot,inf))
 #                    self.mot2linf[mot].append(inf)
-#                    self.lem2lmot[lemma].append(mot)
 
         self.lmot = list(self.mot2linf.keys())
-        sys.stderr.write('READ {} words and {} lemmas from {}\n'.format(len(self.mot2linf), len(self.lem2lmot), f))
-
-    def get_random_txt(self, txt_curr):
-        while True:
-            i = random.randint(0,len(self.lmot)-1)
-            txt_new = self.lmot[i]
-            if txt_new != txt_curr:
-                return txt_new
-    
-    def other_form(self, tok):
-        txt_curr = tok.txt
-        #print('other_form(txt_curr={})'.format(txt_curr))
-        if txt_curr not in self.mot2linf:
-            return '', ''
-            
-        linf = self.mot2linf[txt_curr]
-        #print('\tlinf={}'.format(linf))
-
-        #if len(linf) != 1:
-        #    return '', ''
-        #inf_curr = linf[0]
-
-        inf_curr = spacy2lexicon(tok,linf) #from spacy: tok.pos, tok.inf decider lequel dans linf s'approche le plus: linf=[cgram, genre, nombre, v]
-        if inf_curr not in linf:        
-            return '', ''
-        
-        #print('inf_curr={}'.format(inf_curr))
-        lem_curr = inf_curr[0]
-        tag_curr = separ.join(inf_curr[1:])
-        #print('lem_curr={} tag_curr={}'.format(lem_curr,tag_curr))
-        if lem_curr not in self.lem2lmot:
-            return '', ''
-
-        ltxt = self.lem2lmot[lem_curr]
-        #print('ltxt={}'.format(ltxt))
-        random.shuffle(ltxt)
-        for txt_other in ltxt:
-            if txt_other != txt_curr:
-                #print('txt_other={}'.format(txt_other))
-                return txt_other, tag_curr
-        return '', ''
-        
-class Replacements():
-    def __init__(self, f):
-        self.tok2ltok = defaultdict(list)
-        with open(f) as fd:
-            n = 0
-            for l in fd:
-                toks = l.rstrip().split(' ')
-                assert len(toks) > 0, 'bad replacement input: {}'.format(l)
-                for i in range(len(toks)):
-                    for j in range(i+1,len(toks)):
-                        n += 2
-                        self.tok2ltok[tok1].append(tok2)
-                        self.tok2ltok[tok2].append(tok1)
-        sys.stderr.write('READ {} replacements for {} words\n'.format(n,len(self.tok2ltok)))
-        
-    def replace_by(self, txt): ### {make => do, ...}
-        if txt in self.tok2ltok:
-            ltxt_new = self.R[txt]
-            return ltxt_new[random.randint(0,len(ltxt_new)-1)]
-        return ''
-
-class Appends():
-    def __init__(self, f):
-        self.ltok = []
-        with open(f) as fd:
-            for l in fd:
-                self.ltok.append(l.rstrip())
-                assert len(self.ltok[-1]) > 0, 'bad appends input: {}'.format(l)
-        sys.stderr.write('READ {} words to append\n'.format(len(self.ltok)))
-
-    def is_an_append(txt_next): #### list of words that can be appended to the previous. Ex: 'avoir du' append is 'du'
-        return txt_next in self.ltok
-
-################################################################################################
-################################################################################################
-################################################################################################
+        logging.info('READ {} words and {} lemmas from {}'.format(len(self.mot2linf), len(self.lem2lmot), f))
 
 class Noise():
-    def __init__(self, args):
-        self.lexicon = Lexicon(args.lexicon_file) if args.lexicon_file is not None else None
-        self.replacements = Replacements(args.replace_file) if args.replace_file is not None else None
-        self.appends = Appends(args.append_file) if args.append_file is not None else None
+    def __init__(self,args):
         self.args = args
         self.counts = defaultdict(int)
-        
-    def add(self, toks):
-        self.toks = toks #list of Tok
-        self.n_attempts = 0
-        self.n_changes = 0
-        self.output(-1) ### prints without noise
-        self.seen = defaultdict(int)
-        while self.n_attempts < self.args.max_tokens+5 and self.n_changes < self.args.max_tokens:
-            self.n_attempts += 1
-            i = random.randint(0,len(self.toks)-1) ### may be repeated
-            r = random.random() ### float between [0, 1)
-            p = 0.0
-            if p <= r < p+self.args.p_del: ### DELETE
-                self.do_delete(i)
-                continue
-            p += self.args.p_del
-            if p <= r < p+self.args.p_rep: ### REPLACE
-                self.do_replace(i)
-                continue
-            p += self.args.p_rep
-            if p <= r < p+self.args.p_app: ### APPEND
-                self.do_append(i)
-                continue
-            p += self.args.p_app
-            if p <= r < p+self.args.p_swa: ### SWAP
-                self.do_swap(i)
-                continue
-            p += self.args.p_swa
-            if p <= r < p+self.args.p_mer: ### MERGE
-                self.do_merge(i)
-                continue
-            p += self.args.p_mer
-            if p <= r < p+self.args.p_hyp: ### HYPHEN
-                self.do_hyphen(i)
-                continue
-            p += self.args.p_hyp
-            if p <= r < p+self.args.p_spl: ### SPLIT
-                self.do_split(i)
-                continue
-            p += self.args.p_spl
-            if p <= r < p+self.args.p_cas: ### CASE
-                self.do_case(i)
-                continue
-            p += self.args.p_cas
-            if p <= r < p+self.args.p_lex: ### LEXICON
-                self.do_lexicon(i)
-                continue
-            p += self.args.p_lex
+        self.l = Lexicon(args.lex)
 
-    def output(self, i):
-        out = ' '.join([t.txt+separ+t.tag for t in self.toks])
-        print(out)
-        if i<0:
-            return
-        self.n_changes += 1
-        self.counts[self.toks[i].tag] += 1
-        if self.args.v:
-            print('n={},i={},{}\t{}'.format(self.n_changes,i,self.toks[i].tag,out))
+
+    def noise(self,t):
+        if self.args.adj and t.pos == 'ADJ' or self.args.nom and t.pos == 'NOUN' or self.args.ver and (t.pos == 'VERB' or t.pos == 'AUX'):
+            logging.debug('000 {} {} {}'.format(t.txt,t.pos,t.inf))
+            txt_truecase = t.txt
+            t.txt = t.txt.lower() ### all text tokens appear lowercased in Lexicon
+            if t.lem not in self.l.lem2lmot:
+                return '', ''
+            logging.debug('111')
+            if t.txt not in self.l.mot2linf:
+                return '', ''
+            logging.debug('222')
+            ltxt = list(self.l.lem2lmot[t.lem]) ### set of words with same lemma lem
+            if t.txt in ltxt:
+                ltxt.remove(t.txt)
+            if len(ltxt) == 0:
+                return '', ''
+            logging.debug('333')
+            ltxt.append(txt_truecase) ### last is current token as it originally appears (not lowercsed)
+            linf = list(self.l.mot2linf[t.txt]) ### list of inf's associated to word txt
+            tag = self.get_lexicon_tag(t,linf) ### returns the inf in linf that corresponds to token t
+            logging.debug('444 {} {}'.format(tag,linf))
+            if tag not in linf:
+                return '', ''
+            logging.debug('555 {}'.format(separ.join(list(ltxt))))
+            self.counts[tag] += 1
+            return separ.join(list(ltxt)), tag
+        return '', ''
+
+    def get_lexicon_tag(self, t, linf): 
+        spacy_txt = t.txt #saisit
+        spacy_lem = t.lem #saisir
+        spacy_pos = t.pos #VERB
+        spacy_inf = t.inf #Mood=Ind￨Number=Sing￨Person=3￨Tense=Past￨VerbForm=Fin
+        inf_curr = []
+
+        ##############
+        ### pos ######
+        ##############
+        if spacy_pos == 'VERB': 
+            pos = 'VER'
+        elif spacy_pos == 'AUX': 
+            pos = 'AUX'
+        elif spacy_pos == 'ADJ': 
+            pos = 'ADJ'
+        elif spacy_pos == 'NOUN': 
+            pos = 'NOM'
+        else:
+            logging.error('invalid pos={}\n'.format(spacy_pos))
+            sys.exit()
+        inf_curr.append(pos)
+
+        ### if Lexicon has a single entry for the given curr_txt with same pos i just consider it as the good one to return
+        linf_i = self.single_entry_with_pos(pos,linf)
+        if linf_i: ### for any pos
+            return linf_i
+
+        ##############
+        ### genre ####
+        ##############
+        if 'Gender=Fem' in spacy_inf: genre='f'
+        elif 'Gender=Masc' in spacy_inf: genre='m'
+        else: genre='-'
+        inf_curr.append(genre)
+
+        ##############
+        ### nombre ###
+        ##############
+        if 'Number=Sing' in spacy_inf: nombre='s'
+        elif 'Number=Plur' in spacy_inf: nombre='p'
+        else: nombre='-'
+        inf_curr.append(nombre)    
+
+        ### if Lexicon has a single entry for pos's 'ADJ' or 'POS' for the given curr_txt i just consider it as the good one to return
+        if pos == 'ADJ' or pos == 'NOM':
+            linf_i = self.single_entry_with_pos(pos,linf)
+            if linf_i:
+                return linf_i
+
+        if pos != 'VER' and pos != 'AUX':
+            return separ.join(inf_curr) #[pos, genre, nombre]
+
+        ##############
+        ### vinf #####
+        ##############
+
+        features = []
+        if 'VerbForm=Inf' in spacy_inf:
+            features.append('inf')
+        elif 'VerbForm=Fin' in spacy_inf:
+            features.append('fin')
+        elif 'VerbForm=Part' in spacy_inf:
+            features.append('par')
+
+        if 'Tense=Past' in spacy_inf:
+            features.append('pas')
+        elif 'Tense=Pres' in spacy_inf:
+            features.append('pre')
+        elif 'Tense=Fut' in spacy_inf:
+            features.append('fut')
+        elif 'Tense=Imp' in spacy_inf:
+            features.append('imp')
+
+        if 'Mood=Ind' in spacy_inf:
+            features.append('ind')
+        elif 'Mood=Sub' in spacy_inf:
+            features.append('sub')
+
+        person = number = ''
+        if 'Person=1' in spacy_inf:
+            person = '1'
+        elif 'Person=2' in spacy_inf:
+            person = '2'
+        elif 'Person=3' in spacy_inf:
+            person = '3'
+        if 'Number=Sing' in spacy_inf:
+            number = 's'
+        elif 'Number=Plur' in spacy_inf:
+            number = 'p'
+    
+        if person and number:
+            features.append(person+number)
+
+        linf_i = self.single_entry_with_infs(features, linf)
+        if linf_i:
+            return linf_i
+
+        return ''
+
+    def single_entry_with_pos(self,pos,linf):
+        entries = [i for i in range(len(linf)) if linf[i].split(separ)[0] == pos] 
+        if len(entries) == 1:
+            return linf[entries[0]]
+        return ''
+
+    def single_entry_with_infs(self,feats,linf): ### feats is a list of features like : ['fut', 'inf', '3s', ...]
+        entries = []
+        for feat in feats: ### check if this feat reduces to one the number of possible inf's in linf
+            n_found_infs_in_linf_with_feat = 0
+            for inf in linf:
+                if feat in inf.split(separ):
+                    n_found_infs_in_linf_with_feat += 1
+                    found_inf = inf
+            if n_found_infs_in_linf_with_feat == 1:
+                return found_inf
+        return ''
 
     def stats(self):
-        sys.stderr.write('Vocab of {} tags\n'.format(len(self.counts)))
+        logging.info('Vocab of {} tags'.format(len(self.counts)))
         for k,v in sorted(self.counts.items(), key=lambda kv: kv[1], reverse=True):
-            sys.stderr.write('{}\t{}\n'.format(k,v))
-                
-
-    def do_delete(self, i): ### NOISY: 'i want to|DELETE to go' CORRECT: '0:i 1:want 2:to 3:go'
-        if self.seen['delete']:
-            return
-        self.toks.insert(i, Tok(self.toks[i].txt, False, tag="$DELETE") ) ## after insert(2)
-        self.output(i)
-        self.seen['delete'] += 1
-        
-    def do_replace(self, i): ### NOISY: 'i can|REPLACE_want to go' CORRECT: 'i want to go'
-        if self.seen['replace']:
-            return
-        if self.replacements is None:
-            return
-        if not self.toks[i].original:
-            return
-        txt_old = self.toks[i].txt
-        txt_new = self.replacements.replace_by(txt_old) ### want => can
-        if not txt_new:
-            return
-        ### replace txt, tag of element i-1 avec REPLACE_tok[i]
-        self.toks[i].modify(txt_new, tag='$REPLACE_'+txt_old)
-        self.output(i)
-        self.seen['replace'] += 1
-            
-    def do_append(self, i): ### NOISY: 'i want|APPEND_to go' CORRECT: 'i want to go'
-        ### append_by(to) => True (delete to)
-        if self.seen['append']:
-            return
-        if self.appends is None:
-            return
-        if i == len(self.toks) - 1:
-            return
-        if not self.toks[i].original:
-            return
-        if not self.appends.is_an_append(self.toks[i+1].txt): #toks[i+1] is 'to'
-            return
-        ### remove element i+1 replace tag of element i avec APPEND_tok[i+1]
-        self.toks[i].modify(self.toks[i].txt, tag='$APPEND_'+self.toks[i+1].txt)
-        self.toks.pop(i+1)
-        self.output(i)
-        self.seen['append'] += 1
-        
-    def do_swap(self, i): ### NOISY: 'i to|SWAP want go' CORRECT: 'i want to go'
-        ### swap with next 
-        if self.seen['swap']:
-            return
-        if i == len(self.toks) - 1:
-            return
-        if not self.toks[i].original or not self.toks[i+1].original:
-            return
-        if not self.toks[i].txt.isalpha() or not self.toks[i+1].txt.isalpha():
-            return
-        txt_curr = self.toks[i].txt
-        txt_next = self.toks[i+1].txt
-        self.toks[i].modify(txt_next,tag='$SWAP')
-        self.toks[i+1].modify(txt_curr,tag=keep)
-        self.output(i)
-        self.seen['swap'] += 1
-        
-    def do_merge(self, i): ### NOISY: 'i wa|MERGE nt to go' CORRECT: 'i want to go'
-        ### merge two tokens
-        if self.seen['merge']:
-            return
-        if not self.toks[i].original:
-            return
-        if not self.toks[i].txt.isalpha() or len(self.toks[i].txt) < 2:
-            return
-        k = random.randint(1,len(self.toks[i].txt)-1)
-        ls = self.toks[i].txt[:k]
-        rs = self.toks[i].txt[k:]
-        self.toks[i].modify(''.join(rs), tag=keep)
-        self.toks.insert(i,Tok(''.join(ls), False, tag='$MERGE'))
-        self.output(i)
-        self.seen['merge'] += 1
-        
-    def do_hyphen(self, i): ### NOISY: 'work in depth' CORRECT: 'work in-depth'
-        ### merge with an hyphen
-        if self.seen['hyphen']:
-            return
-        if not self.toks[i].original:
-            return
-        p = self.toks[i].txt.find('-',1,len(self.toks[i].txt)-1)
-        if p == -1:
-            return
-        first = self.toks[i].txt[:p]
-        second = self.toks[i].txt[p+1:]
-        self.toks[i].modify(second, tag=keep)
-        self.toks.insert(i,Tok(first, False, tag='$HYPHEN'))
-        self.output(i)
-        self.seen['hyphen'] += 1
-        
-    def do_split(self, i): ### NOISY: 'i want-to|SPLIT go' CORRECT: 'i want to go'
-        ### split an hyphen
-        if self.seen['split']:
-            return
-        if i == len(self.toks) - 1:
-            return
-        if not self.toks[i].original or not self.toks[i+1].original:
-            return
-        if not self.toks[i].txt.isalpha() or not self.toks[i+1].txt.isalpha():
-            return
-        self.toks[i].modify(self.toks[i].txt+'-'+self.toks[i+1].txt, tag='$SPLIT')
-        self.toks.pop(i+1)
-        self.output(i)
-        self.seen['split'] += 1
-                
-    def do_case(self, i): ### NOISY: 'i|CASE want to go' CORRECT: 'I want to go'
-        ### change the case of the first char
-        if self.seen['case']:
-            return
-        if not self.toks[i].original:
-            return
-        if not self.toks[i].txt.isalpha():
-            return
-        first = self.toks[i].txt[0]
-        rest = self.toks[i].txt[1:]
-        first = first.upper() if first.islower() else first.lower()
-        self.toks[i].modify(first + rest, tag='$CASE')
-        self.output(i)
-        self.seen['case'] += 1
-        
-    def do_lexicon(self, i): ### NOISY: 'i wants|VER:ind:pre:1s to go' CORRECT: 'i want to go'
-        if self.seen['lexicon']:
-            return
-        if self.lexicon is None:
-            return
-        if not self.toks[i].original:
-            return
-        if not self.toks[i].txt.isalpha():
-            return
-        if self.toks[i].pos != 'VER' and self.toks[i].pos != 'NOM' and self.toks[i].pos != 'ADJ':
-            return
-        txt_curr_other, tag_curr = self.lexicon.other_form(self.toks[i])
-        if not txt_curr_other:
-            return
-        self.toks[i].modify(txt_curr_other,tag='$'+tag_curr)
-        self.output(i)
-        self.seen['lexicon'] += 1
+            logging.info('{}\t{}'.format(k,v))
 
         
