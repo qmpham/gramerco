@@ -25,7 +25,7 @@ $APPEND_tok  | Append tok to current token
 
 It outputs the same texts received as input (FRENCH_TXT) together with noun, adjectives and verbs found on each sentence. For instance, given the french sentence 'Le président français se rend à Moscou':
 
-Token | 
+Token | Adj/Noun/Verb recognized
 ------|-------
 Le    |
 président | NOM￨m￨s:présidentes￨présidente￨présidents￨président
