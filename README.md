@@ -1,7 +1,7 @@
 # gramerco
 
 ## Download list of french words with morph
- wget http://www.lexique.org/databases/Lexique383/Lexique383.tsv
+''' wget http://www.lexique.org/databases/Lexique383/Lexique383.tsv '''
 
 * 
 python3 scripts/noise_lex.py resources/Lexique383.tsv FRENCH_TXT -nom -adj -ver > FRENCH_TXT.lex
