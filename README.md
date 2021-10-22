@@ -5,7 +5,7 @@ The network fine-tunes a BERT-like french language model to perform a gramatical
 Thus, input is a noisy french text while output is a set of tags (one for each input word) that indicates if the word is correct ($KEEP) or if needs to be corrected following the output tag. The next tags are considered:
 
 Tag | Description
------------------
+----|------------
 $KEEP | No correction is needed
 $DELETE | the given token must be deleted
 $COPY | the given token must be deleted as a copy of the next word
