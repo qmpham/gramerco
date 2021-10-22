@@ -23,14 +23,17 @@ $APPEND_tok  | Append tok to current token
 ### Prepare lexicon replacements for (nouns, verbs and adjectives)
 `python3 scripts/noise_lex.py resources/Lexique383.tsv FRENCH_TXT -nom -adj -ver > FRENCH_TXT.lex`
 
-It outputs the same texts received as input (FRENCH_TXT) together with noun, adjectives and verbs found on each sentence:
+It outputs the same texts received as input (FRENCH_TXT) together with noun, adjectives and verbs found on each sentence. For instance, given the french sentence 'Le président français se rend à Moscou':
 
-Input string | tokens recognised
--------------|-------
-Visite du chef d'état-major sud-africain en Arabie saoudite | NOM￨f￨s:visites￨Visite <br>NOM￨-￨s:chefs￨chef <br>NOM￨m￨s:états￨état
-Fort séisme aux Célèbes: au moins 13 morts | NOM￨m￨s:séismes￨séisme <br>NOM￨-￨p:mortes￨morte￨mort￨morts
-Pedro Castro Van-Dunem inhumé à Luanda | VER￨m￨s￨par￨pas:inhumés￨inhume￨inhumaient￨inhumée￨inhumer￨inhumons￨inhuma￨inhumait￨inhumé
-Le Matif chute dans la perspective d'une hausse des taux européens | VER￨-￨-￨ind￨pre￨3s:chutes￨chute <br>NOM￨f￨s:perspectives￨perspective <br>NOM￨f￨s:hausses￨hausse <br>ADJ￨m￨p:européenne￨européennes￨européen￨européens
+Token | 
+------|-------
+Le    |
+président | NOM￨m￨s:présidentes￨présidente￨présidents￨président
+français | ADJ￨m￨-:française￨françaises￨français
+se | 
+rend | VER￨-￨-￨ind￨pre￨3s:rendus￨rendiez￨rendis￨...￨rendriez￨rendaient￨rend
+à | 
+Moscou | 
 
 ### Compute dictionary with word frequencies
 `python3 scripts/txt2dic.py < FRENCH_TXT > FRENCH_TXT.dic`
