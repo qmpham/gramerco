@@ -13,6 +13,7 @@ Input string | tokens recognised
 Visite du chef d'état-major sud-africain en Arabie saoudite | NOM￨f￨s:visites￨Visite <br>NOM￨-￨s:chefs￨chef <br>NOM￨m￨s:états￨état
 Fort séisme aux Célèbes: au moins 13 morts | NOM￨m￨s:séismes￨séisme <br>NOM￨-￨p:mortes￨morte￨mort￨morts
 Pedro Castro Van-Dunem inhumé à Luanda | VER￨m￨s￨par￨pas:inhumés￨inhume￨inhumaient￨inhumée￨inhumer￨inhumons￨inhuma￨inhumait￨inhumé
+Le Matif chute dans la perspective d'une hausse des taux européens | VER￨-￨-￨ind￨pre￨3s:chutes￨chute <br>NOM￨f￨s:perspectives￨perspective <br>NOM￨f￨s:hausses￨hausse <br>ADJ￨m￨p:européenne￨européennes￨européen￨européens
 
 ### Compute dictionary with word frequencies
 `python3 scripts/txt2dic.py < FRENCH_TXT > FRENCH_TXT.dic`
