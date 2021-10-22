@@ -4,7 +4,7 @@ The network fine-tunes a BERT-like french language model to perform a gramatical
 
 Thus, input is a noisy french text while output is a set of tags (one for each input word) that indicates wether the word is correct or if needs to be corrected following the output tag. The next tags are considered:
 
-Tag    | Description | 
+Tag    | Description | Example
 -------|----------------
 $K     | Keep current token | (X -> X)
 $D     | Delete current token | (X -> )
