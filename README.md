@@ -3,7 +3,7 @@
 ### Download list of french words (with morphologic features)
 `wget http://www.lexique.org/databases/Lexique383/Lexique383.tsv`
 
-### Prepare lexicon replacements for (nouns, verbs an adjectives)
+### Prepare lexicon replacements for (nouns, verbs and adjectives)
 `python3 scripts/noise_lex.py resources/Lexique383.tsv FRENCH_TXT -nom -adj -ver > FRENCH_TXT.lex`
 
 ### Compute dictionary with word frequencies
