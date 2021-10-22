@@ -31,7 +31,7 @@ Le    |
 président | NOM￨m￨s:présidentes￨présidente￨présidents￨président
 français | ADJ￨m￨-:française￨françaises￨français
 se | 
-rend | VER￨-￨-￨ind￨pre￨3s:rendus￨rendiez￨rendis￨...￨rendriez￨rendaient￨rend
+rend | VER￨-￨-￨ind￨pre￨3s:rendus￨rendiez￨...￨rendaient￨rend
 à | 
 Moscou | 
 
