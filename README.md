@@ -10,7 +10,7 @@ $KEEP        | No correction is needed
 $DELETE      | Current token must be deleted (X => )
 $SWAP        | Current and next tokens must be swapped (X Y => Y X)
 $MERGE       | Current and next tokens must be merged joined (X Y => XY)
-$HYPHEN      | Current and next tokens must be merged with an hyphen (X Y => XY)
+$HYPHEN      | Current and next tokens must be merged with an hyphen (X Y => X-Y)
 $SPLIT       | Current token has an hyphen to be replaced by a space (X-Y => X Y)
 $CASE        | Current token first character must flip its case (X => X')
 $TRANSF_tag  | Current token must be inflected according to tag (X => X')
