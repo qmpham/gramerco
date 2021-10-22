@@ -46,7 +46,7 @@ Moscou |
 python3 scripts/add_french_noise.py -dic FRENCH_TXT.dic -rep Lexique383.tsv FRENCH_TXT.lex -app FRENCH_TXT.app > FRENCH_TXT.noise
 ```
 
-Noise examples
---------------
-Le￨$KEEP président￨$KEEP français￨$APPEND_se rendais￨$TRANSFORM_VER￨-￨-￨ind￨pre￨3s à|$KEEP moscou￨$CASE
+Noise examples |
+-------------- |
+Le￨$KEEP président￨$KEEP français￨$APPEND_se rendais￨$TRANSFORM_VER￨-￨-￨ind￨pre￨3s à|$KEEP moscou￨$CASE |
 
