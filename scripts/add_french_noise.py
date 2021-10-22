@@ -356,7 +356,7 @@ def read_rep(f):
     return {'mot2pos':mot2pos, 'pos2mot':pos2mot}
 
 def read_app(f):
-    mots = defaultdict(set)
+    mots = set()
     if not f:
         return mots
     with open(f) as fd:
