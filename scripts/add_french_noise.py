@@ -50,10 +50,10 @@ def do_lexicon(toks, tags, lex_rep):
         idx = toks.index(curr)
         if tags[idx] != keep:
             continue
-        tags[idx] = tag
+        tags[idx] = '$TRANSFORM_'+tag
         toks[idx] = fixCase(other,curr)
         logging.debug('do_lexicon: {} => {} tag={}'.format(curr,toks[idx],tags[idx]))
-        return tag
+        return tags[idx]
     return ''
 
 def do_delete(toks, tags, dic):
@@ -347,7 +347,10 @@ def read_rep(f):
             if cgram.startswith('ART'):
                 mot2pos[mot].add('ART')
                 pos2mot['ART'].add(mot)
-            elif cgram == 'PRE' or cgram == 'PRO':
+            if cgram.startswith('PRO'):
+                mot2pos[mot].add('ART')
+                pos2mot['PRO'].add(mot)
+            elif cgram == 'PRE' or cgram == 'ADV':
                 mot2pos[mot].add(cgram)
                 pos2mot[cgram].add(mot)
     return {'mot2pos':mot2pos, 'pos2mot':pos2mot}
@@ -404,7 +407,7 @@ if __name__ == '__main__':
             noise_line(toks,l,dic,rep,app,seen,args)
             nsents += 1
             ntokens += len(toks)
-        sys.stderr.write('found {} sentences\n'.format(nsents))
+        sys.stderr.write('Found {} sentences\n'.format(nsents))
 
         logging.info('Vocab of {} tags'.format(len(seen)))
         for k,v in sorted(seen.items(), key=lambda kv: kv[1], reverse=True):

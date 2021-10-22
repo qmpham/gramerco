@@ -47,7 +47,7 @@ if __name__ == '__main__':
             for t in toks:
                 txt_other, tag_curr = n.noise(t)
                 if txt_other and tag_curr:
-                    out.append('$'+tag_curr+':'+txt_other)
+                    out.append(tag_curr+':'+txt_other)
             print('\t'.join(out))
             nsents += 1
             ntoks += len(toks)
