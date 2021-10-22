@@ -12,7 +12,7 @@ Input string | tokens recognised
 -------------|-------
 Visite du chef d'état-major sud-africain en Arabie saoudite | NOM￨f￨s:visites￨Visite <br>NOM￨-￨s:chefs￨chef <br>NOM￨m￨s:états￨état
 Fort séisme aux Célèbes: au moins 13 morts | NOM￨m￨s:séismes￨séisme <br>NOM￨-￨p:mortes￨morte￨mort￨morts
-Suharto donne l'ordre d'inhumer sur place les victimes non-identifiées | NOM￨m￨s:ordres￨ordre <br>VER￨-￨-￨inf:inhumés￨inhume￨inhumaient￨inhumée￨inhumons￨inhuma￨inhumé￨inhumait￨inhumer <br>NOM￨f￨s:places￨place <br>NOM￨f￨p:victime￨victimes
+Pedro Castro Van-Dunem inhumé à Luanda | VER￨m￨s￨par￨pas:inhumés￨inhume￨inhumaient￨inhumée￨inhumer￨inhumons￨inhuma￨inhumait￨inhumé
 
 ### Compute dictionary with word frequencies
 `python3 scripts/txt2dic.py < FRENCH_TXT > FRENCH_TXT.dic`
