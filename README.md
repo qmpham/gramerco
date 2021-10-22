@@ -6,7 +6,7 @@ Thus, input is a noisy french text while output is a set of tags (one for each i
 
 Tag          | Description
 -------------|------------
-$KEEP        | No correction is needed
+$KEEP        | No correction is needed (X => X)
 $DELETE      | Current token must be deleted (X => )
 $SWAP        | Current and next tokens must be swapped (X Y => Y X)
 $MERGE       | Current and next tokens must be merged joined (X Y => XY)
