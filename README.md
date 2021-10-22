@@ -2,20 +2,20 @@
 
 The network fine-tunes a BERT-like french language model to perform a gramatical error correction task.
 
-Thus, input is a noisy french text while output is a set of tags (one for each input word) that indicates if the word is correct ($KEEP) or if needs to be corrected following the output tag. The next tags are considered:
+Thus, input is a noisy french text while output is a set of tags (one for each input word) that indicates wether the word is correct or if needs to be corrected following the output tag. The next tags are considered:
 
-Tag     | Description
---------|------------
-$KEEP   | No correction is needed
-$DELETE | the token must be deleted
-$SWAP   | the current and next tokens must be swapped
-$HYPHEN | The current and next tokens must be merged with an hyphen
-$MERGE  | The current and next tokens must be merged joined
-$SPLIT  | The hyphen of the current word must be repaced by a space
-$CASE   | The case of the first character of current word must be changed
-$TRANS_tag | Current token must be inflected using tag information
+Tag          | Description
+-------------|------------
+$KEEP        | No correction is needed
+$DELETE      | Current token must be deleted
+$SWAP        | Current and next tokens must be swapped
+$HYPHEN      | Current and next tokens must be merged with an hyphen
+$MERGE       | Current and next tokens must be merged joined
+$SPLIT       | Current token has an hyphen to be replaced by a space
+$CASE        | Current token first character must flip its case
+$TRANS_tag   | Current token must be inflected according to tag
 $REPLACE_tok | Replace current token by tok
-$APPEND_tok | Append tok to current token
+$APPEND_tok  | Append tok to current token
 
 ### Download list of french words (with morphologic features)
 `wget http://www.lexique.org/databases/Lexique383/Lexique383.tsv`
