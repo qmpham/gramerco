@@ -13,4 +13,7 @@
 `python3 scripts/txt2app.py resources/Lexique383.tsv -pun -pro -adv -pre > FRENCH_TXT.app`
 
 ### Generate noisy dataset
-`python3 scripts/add_french_noise.py -dic FRENCH_TXT.dic -rep resources/Lexique383.tsv FRENCH_TXT.lex -app FRENCH_TXT.app > FRENCH_TXT.noise`
+```
+python3 scripts/add_french_noise.py -dic FRENCH_TXT.dic -rep resources/Lexique383.tsv FRENCH_TXT.lex -app FRENCH_TXT.app > FRENCH_TXT.noise
+
+```
