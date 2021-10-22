@@ -4,18 +4,18 @@ The network fine-tunes a BERT-like french language model to perform a gramatical
 
 Thus, input is a noisy french text while output is a set of tags (one for each input word) that indicates wether the word is correct or if needs to be corrected following the output tag. The next tags are considered:
 
-Tag          | Description
--------------|------------
-$KEEP        | No correction is needed (X => X)
-$DELETE      | Current token must be deleted (X => )
-$SWAP        | Current and next tokens must be swapped (X Y => Y X)
-$MERGE       | Current and next tokens must be merged joined (X Y => XY)
-$HYPHEN      | Current and next tokens must be merged with an hyphen (X Y => X-Y)
-$SPLIT       | Current token has an hyphen to be replaced by a space (X-Y => X Y)
-$CASE        | Current token first character must flip its case (X => X')
-$TRANSF_tag  | Current token must be inflected according to tag (X => X')
-$REPLACE_tok | Replace current token by tok (X => tok)
-$APPEND_tok  | Append tok to current token (X => X tok)
+Tag    | Description
+-------|------------
+$K     | Keep current token (X => X)
+$D     | Delete current token (X => )
+$X     | Exchange current and next tokens (X Y => Y X)
+$M     | Merge current and next tokens (X Y => XY)
+$H     | Merge with an hyphen current and next tokens (X Y => X-Y)
+$S     | Split current token using by the hyphen (X-Y => X Y)
+$C     | Flip the case of current token first character (X => X')
+$T_tag | Inflect current token following tag (X => X')
+$R_tok | Replace current token by tok (X => tok)
+$A_tok | Append tok to current token (X => X tok)
 
 ### Download list of french words (with morphologic features)
 `wget http://www.lexique.org/databases/Lexique383/Lexique383.tsv`
