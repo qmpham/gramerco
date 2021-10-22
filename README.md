@@ -13,7 +13,7 @@ $HYPHEN      | Current and next tokens must be merged with an hyphen
 $MERGE       | Current and next tokens must be merged joined
 $SPLIT       | Current token has an hyphen to be replaced by a space
 $CASE        | Current token first character must flip its case
-$TRANS_tag   | Current token must be inflected according to tag
+$TRANSF_tag   | Current token must be inflected according to tag
 $REPLACE_tok | Replace current token by tok
 $APPEND_tok  | Append tok to current token
 
@@ -48,5 +48,5 @@ python3 scripts/add_french_noise.py -dic FRENCH_TXT.dic -rep Lexique383.tsv FREN
 
 Noise examples |
 -------------- |
-Le￨$KEEP président￨$KEEP français￨$APPEND_se rendais￨$TRANS_VER￨-￨-￨ind￨pre￨3s à￨$KEEP moscou￨$CASE |
+Le￨$KEEP président￨$KEEP français￨$APPEND_se rendais￨$TRANSF_VER￨-￨-￨ind￨pre￨3s à￨$KEEP moscou￨$CASE |
 
