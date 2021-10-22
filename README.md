@@ -4,16 +4,15 @@ The network fine-tunes a BERT-like french language model to perform a gramatical
 
 Thus, input is a noisy french text while output is a set of tags (one for each input word) that indicates if the word is correct ($KEEP) or if needs to be corrected following the output tag. The next tags are considered:
 
-Tag | Description
-----|------------
-$KEEP | No correction is needed
-$DELETE | the given token must be deleted
-$COPY | the given token must be deleted as a copy of the next word
-$SWAP | the given and next tokens must be swapped
+Tag     | Description
+--------|------------
+$KEEP   | No correction is needed
+$DELETE | the token must be deleted
+$SWAP   | the given and next tokens must be swapped
 $HYPHEN | The given and next tokens must be merged with an hyphen
-$MERGE | The given and next tokens must be merged 
-$SPLIT | The hyphen appearing in the word must be repaced by a space
-$CASE | The case of the first character must be changed
+$MERGE  | The given and next tokens must be merged 
+$SPLIT  | The hyphen appearing in the word must be repaced by a space
+$CASE   | The case of the first character must be changed
 
 ### Download list of french words (with morphologic features)
 `wget http://www.lexique.org/databases/Lexique383/Lexique383.tsv`
