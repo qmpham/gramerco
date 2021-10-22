@@ -19,7 +19,7 @@ if __name__ == '__main__':
         ntokens += len(toks)
     sys.stderr.write('Found {} sentences with {} words. Vocab is {}\n'.format(nsents, ntokens, len(dic)))
     for w,n in sorted(dic.items(), key=lambda kv: kv[1], reverse=True):
-        print('{} {:.8f}'.format(w,n/ntokens))
+        print('{} {}'.format(w,n/ntokens))
         
         
         
