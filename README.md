@@ -13,7 +13,7 @@ $M     | Merge current and next tokens                  | (X Y -> XY)
 $H     | Merge with an hyphen current and next tokens   | (X Y -> X-Y)
 $S     | Split current token using by the hyphen        | (X-Y -> X Y)
 $C     | Flip the case of current token first character | (X -> X')
-$T_tag | Inflect current token following tag            | (X -> X')
+$|_tag | Inflect current token following tag            | (X -> X')
 $R_tok | Replace current token by tok                   | (X -> tok)
 $A_tok | Append tok to current token                    | (X -> X tok)
 
