@@ -36,6 +36,7 @@ class Lexicon():
     def __init__(self,f):
         self.mot2linf = defaultdict(set)
         self.lem2lmot = defaultdict(set)
+        self.mot2llempos = defaultdict(set)
         with open(f) as fd:
             for l in fd: 
                 toks = l.rstrip().split('\t')
@@ -47,6 +48,7 @@ class Lexicon():
 
                 if cgram == 'VER' or cgram == 'AUX':
                     self.lem2lmot[lemma].add(mot)
+                    self.mot2llempos[mot].add(lemma+separ+cgram)
                     for v in infover.split(';'):
                         if len(v):
                             inf = separ.join([cgram, genre, nombre, v])
@@ -54,6 +56,7 @@ class Lexicon():
                     
                 elif cgram == 'NOM' or  cgram == 'ADJ':
                     self.lem2lmot[lemma].add(mot)
+                    self.mot2llempos[mot].add(lemma+separ+cgram)
                     inf = separ.join([cgram, genre, nombre])
                     self.mot2linf[mot].add(inf)
 
@@ -75,23 +78,24 @@ class Noise():
 
     def noise(self,t):
         if self.args.adj and t.pos == 'ADJ' or self.args.nom and t.pos == 'NOUN' or self.args.ver and (t.pos == 'VERB' or t.pos == 'AUX'):
-            logging.debug('000 {} {} {}'.format(t.txt,t.pos,t.inf))
+            logging.debug('000 {} {} {} {}'.format(t.txt,t.lem,t.pos,t.inf))
             txt_truecase = t.txt
             t.txt = t.txt.lower() ### all text tokens appear lowercased in Lexicon
+            self.lexicon_lem_of_token(t)
             if t.lem not in self.l.lem2lmot:
                 return '', ''
             logging.debug('111')
             if t.txt not in self.l.mot2linf:
                 return '', ''
-            logging.debug('222')
-            ltxt = list(self.l.lem2lmot[t.lem]) ### set of words with same lemma lem
+            logging.debug('222 lem = {}'.format(t.lem))
+            ltxt = list(self.l.lem2lmot[t.lem]) ### list of words with same lemma lem
             if t.txt in ltxt:
                 ltxt.remove(t.txt)
             if len(ltxt) == 0:
                 return '', ''
-            logging.debug('333')
+            logging.debug('333 ltxt={}'.format(ltxt))
             ltxt.append(txt_truecase) ### last is current token as it originally appears (not lowercsed)
-            linf = list(self.l.mot2linf[t.txt]) ### list of inf's associated to word txt
+            linf = self.infs_of_word(t) ### list of inf's associated to word txt with same pos
             tag = self.get_lexicon_tag(t,linf) ### returns the inf in linf that corresponds to token t
             logging.debug('444 {} {}'.format(tag,linf))
             if tag not in linf:
@@ -100,6 +104,52 @@ class Noise():
             self.counts[tag] += 1
             return separ.join(list(ltxt)), tag
         return '', ''
+
+    def lexicon_lem_of_token(self,t):
+        if t.pos == 'VERB': 
+            pos = 'VER'
+        elif t.pos == 'AUX': 
+            pos = 'AUX'
+        elif t.pos == 'ADJ': 
+            pos = 'ADJ'
+        elif t.pos == 'NOUN': 
+            pos = 'NOM'
+        else:
+            logging.error('invalid pos={}\n'.format(t.pos))
+            sys.exit()
+
+        if t.txt not in self.l.mot2llempos:
+            return
+
+        for lempos in self.l.mot2llempos[t.txt]:
+            lempos = lempos.split(separ)
+            if lempos[1] == pos:
+                if lempos[0] != t.lem:
+                    logging.debug('replacing Spacy by lexicon lem {} => {}'.format(t.lem,lempos[0]))
+                    t.lem = lempos[0]
+                return
+        return
+
+    def infs_of_word(self,t):
+        if t.pos == 'VERB': 
+            pos = 'VER'
+        elif t.pos == 'AUX': 
+            pos = 'AUX'
+        elif t.pos == 'ADJ': 
+            pos = 'ADJ'
+        elif t.pos == 'NOUN': 
+            pos = 'NOM'
+        else:
+            logging.error('invalid pos={}\n'.format(t.pos))
+            sys.exit()
+
+        linf = []    
+        for inf in self.l.mot2linf[t.txt]:
+            logging.debug(inf)
+            if inf.split(separ)[0] == pos:
+                linf.append(inf)
+                logging.debug('ok')
+        return linf
 
     def get_lexicon_tag(self, t, linf): 
         spacy_txt = t.txt #saisit
