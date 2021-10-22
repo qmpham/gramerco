@@ -48,5 +48,5 @@ python3 scripts/add_french_noise.py -dic FRENCH_TXT.dic -rep Lexique383.tsv FREN
 
 Noise examples |
 -------------- |
-Le￨$KEEP président￨$KEEP français￨$APPEND_se rendais￨$TRANSFORM_VER￨-￨-￨ind￨pre￨3s à|$KEEP moscou￨$CASE |
+Le￨$KEEP président￨$KEEP français￨$APPEND_se rendais￨$TRANS_VER￨-￨-￨ind￨pre￨3s à|$KEEP moscou￨$CASE |
 
