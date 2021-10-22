@@ -11,9 +11,8 @@ It outputs the same texts received as input (FRENCH_TXT) together with noun, adj
 Input string | tokens recognised
 -------------|-------
 Visite du chef d'état-major sud-africain en Arabie saoudite | NOM￨f￨s:visites￨Visite <br>NOM￨-￨s:chefs￨chef <br>NOM￨m￨s:états￨état
-Fort séisme aux Célèbes: au moins 13 morts | NOM￨m￨s:séismes￨séisme NOM￨-￨p:mortes￨morte￨mort￨morts
-A l'attention des chefs de rubrique sportive | NOM￨f￨s:attentions￨attention NOM￨-￨p:chef￨chefs NOM￨f￨s:rubriques￨rubrique      ADJ￨f￨s:sportifs￨sportives￨sportif￨sportive
-
+Fort séisme aux Célèbes: au moins 13 morts | NOM￨m￨s:séismes￨séisme <br>NOM￨-￨p:mortes￨morte￨mort￨morts
+Suharto donne l'ordre d'inhumer sur place les victimes non-identifiées | NOM￨m￨s:ordres￨ordre <br>VER￨-￨-￨inf:inhumés￨inhume￨inhumaient￨inhumée￨inhumons￨inhuma￨inhumé￨inhumait￨inhumer <br>NOM￨f￨s:places￨place <br>NOM￨f￨p:victime￨victimes
 
 ### Compute dictionary with word frequencies
 `python3 scripts/txt2dic.py < FRENCH_TXT > FRENCH_TXT.dic`
