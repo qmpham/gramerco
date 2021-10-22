@@ -8,11 +8,11 @@ Tag     | Description
 --------|------------
 $KEEP   | No correction is needed
 $DELETE | the token must be deleted
-$SWAP   | the given and next tokens must be swapped
-$HYPHEN | The given and next tokens must be merged with an hyphen
-$MERGE  | The given and next tokens must be merged 
-$SPLIT  | The hyphen appearing in the word must be repaced by a space
-$CASE   | The case of the first character must be changed
+$SWAP   | the current and next tokens must be swapped
+$HYPHEN | The current and next tokens must be merged with an hyphen
+$MERGE  | The current and next tokens must be merged joined
+$SPLIT  | The hyphen of the current word must be repaced by a space
+$CASE   | The case of the first character of current word must be changed
 
 ### Download list of french words (with morphologic features)
 `wget http://www.lexique.org/databases/Lexique383/Lexique383.tsv`
