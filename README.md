@@ -4,14 +4,14 @@ The network fine-tunes a BERT-like french language model to perform a gramatical
 
 Thus, input is a noisy french text while output is a set of tags (one for each input word) that indicates wether the word is correct or if needs to be corrected following the output tag. The next tags are considered:
 
-Tag    | Description | Example
+Tag    | Description | Pattern
 -------|-------------|--------
 $K     | Keep current token                             | (X -> X)
-$D     | Delete current token                           | (X -> )
-$X     | Exchange current and next tokens               | (X Y -> Y X)
+$E     | Erase current token                            | (X -> )
+$S     | Swap current and next tokens                   | (X Y -> Y X)
 $M     | Merge current and next tokens                  | (X Y -> XY)
 $H     | Merge with an hyphen current and next tokens   | (X Y -> X-Y)
-$S     | Split current token using by the hyphen        | (X-Y -> X Y)
+$D     | Divide current token by the hyphen             | (X-Y -> X Y)
 $C     | Flip the case of current token first character | (X -> X')
 $I_tag | Inflect current token following tag            | (X -> X')
 $R_tok | Replace current token by tok                   | (X -> tok)
