@@ -23,9 +23,9 @@ $APPEND_tok  | Append tok to current token
 ### Prepare lexicon replacements for (nouns, verbs and adjectives)
 `python3 scripts/noise_lex.py resources/Lexique383.tsv FRENCH_TXT > FRENCH_TXT.lex`
 
-It outputs the same texts received as input (FRENCH_TXT) together with noun, adjectives and verbs found on each sentence. For instance, given the french sentence 'Le président français se rend à Moscou':
+It outputs the same texts received as input (FRENCH_TXT) together with information of nouns, adjectives and verbs found on each sentence. For instance, given the french sentence 'Le président français se rend à Moscou':
 
-Token | Adj/Noun/Verb recognized
+Token | Adj/Noun/Verb found
 ------|-------
 Le    |
 président | NOM￨m￨s:présidentes￨présidente￨présidents￨président
