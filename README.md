@@ -13,6 +13,9 @@ $HYPHEN | The current and next tokens must be merged with an hyphen
 $MERGE  | The current and next tokens must be merged joined
 $SPLIT  | The hyphen of the current word must be repaced by a space
 $CASE   | The case of the first character of current word must be changed
+$TRANS_tag | Current token must be inflected using tag information
+$REPLACE_tok | Replace current token by tok
+$APPEND_tok | Append tok to current token
 
 ### Download list of french words (with morphologic features)
 `wget http://www.lexique.org/databases/Lexique383/Lexique383.tsv`
