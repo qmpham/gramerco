@@ -1,3 +1,5 @@
 resources
-*/__pycache__*
+scripts/data/__pycache__/
+scripts/model-GECToR/__pycache__/
+*/__pycache__/*
 */scrap.py
