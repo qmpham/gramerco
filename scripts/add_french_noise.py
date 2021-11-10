@@ -8,6 +8,9 @@ import pyonmttok
 import logging
 from collections import defaultdict
 from tqdm import tqdm
+from tokenizer import WordTokenizer
+from transformers import FlaubertTokenizer
+
 
 separ = '￨'
 keep = '·'
@@ -35,6 +38,8 @@ def output(toks, tags):
     for i in range(len(toks)):
         out.append(toks[i] + separ + tags[i])
     print(' '.join(out))
+    if out:
+        ...
 
 def do_lexicon(toks, tags, lex_rep):
     random.shuffle(lex_rep)
@@ -323,6 +328,7 @@ def noise_line(toks,lex,dic,rep,app,seen,args):
             continue
         p += args.p_cas
 
+
 def read_dic(f):
     txt = []
     frq = []
@@ -341,7 +347,7 @@ def read_rep(f):
     if not f:
         return {'mot2pos':mot2pos, 'pos2mot':pos2mot}
     with open(f) as fd:
-        for l in fd: 
+        for l in fd:
             toks = l.rstrip().split('\t')
             mot, cgram = toks[0].replace(' ',space), toks[3]
             if cgram.startswith('ART'):
@@ -387,7 +393,8 @@ if __name__ == '__main__':
     parser.add_argument('-log', default='info', help="Logging level [debug, info, warning, critical, error] (info)")
     args = parser.parse_args()
     create_logger('stderr',args.log)
-    t = pyonmttok.Tokenizer("conservative", joiner_annotate=False)
+    # t = pyonmttok.Tokenizer("conservative", joiner_annotate=False)
+    t = WordTokenizer(FlaubertTokenizer)
     dic = read_dic(args.dictionary_file)
     rep = read_rep(args.replace_file)
     app = read_app(args.append_file)
@@ -398,12 +405,12 @@ if __name__ == '__main__':
         with open(f) as fd:
             lines = []
             for l in fd:
-                lines.append(l.rstrip())                
+                lines.append(l.rstrip())
         sys.stderr.write('READ {} sentences from {}\n'.format(len(lines),f))
 
-        for l in tqdm(lines):    
+        for l in tqdm(lines):
             l = l.split('\t')
-            toks, _ = t.tokenize(l.pop(0))
+            toks  = t.tokenize(l.pop(0))
             noise_line(toks,l,dic,rep,app,seen,args)
             nsents += 1
             ntokens += len(toks)
@@ -412,6 +419,3 @@ if __name__ == '__main__':
         logging.info('Vocab of {} tags'.format(len(seen)))
         for k,v in sorted(seen.items(), key=lambda kv: kv[1], reverse=True):
             logging.info('{}\t{}'.format(v,k))
-        
-        
-        
