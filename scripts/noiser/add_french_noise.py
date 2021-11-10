@@ -3,11 +3,15 @@
 
 import argparse
 import sys
+import os
 import random
 import pyonmttok
 import logging
 from collections import defaultdict
 from tqdm import tqdm
+pwd = os.path.dirname(__file__)
+sys.path.append(os.path.abspath(pwd))
+sys.path.append(os.path.dirname(os.path.abspath(pwd)))
 from tokenizer import WordTokenizer
 from transformers import FlaubertTokenizer
 
@@ -23,10 +27,8 @@ def create_logger(logfile, loglevel):
         sys.exit()
     if logfile is None or logfile == 'stderr':
         logging.basicConfig(format='[%(asctime)s.%(msecs)03d] %(levelname)s %(message)s', datefmt='%Y-%m-%d_%H:%M:%S', level=numeric_level)
-        logging.info('Created Logger level={}'.format(loglevel))
     else:
         logging.basicConfig(filename=logfile, format='[%(asctime)s.%(msecs)03d] %(levelname)s %(message)s', datefmt='%Y-%m-%d_%H:%M:%S', level=numeric_level)
-        logging.info('Created Logger level={} file={}'.format(loglevel, logfile))
 
 def fixCase(other, curr):
     if curr[0].isupper() and other[0].islower():
@@ -38,8 +40,6 @@ def output(toks, tags):
     for i in range(len(toks)):
         out.append(toks[i] + separ + tags[i])
     print(' '.join(out))
-    if out:
-        ...
 
 def do_lexicon(toks, tags, lex_rep):
     random.shuffle(lex_rep)

@@ -1,6 +1,11 @@
 import pyonmttok
 from transformers import FlaubertTokenizer
-from Noise import Spacy
+import os
+import sys
+pwd = os.path.dirname(__file__)
+sys.path.append(os.path.abspath(pwd))
+sys.path.append(os.path.dirname(os.path.abspath(pwd)))
+from noiser.Noise import Spacy
 from collections import defaultdict
 
 
