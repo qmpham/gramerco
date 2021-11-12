@@ -412,6 +412,7 @@ if __name__ == '__main__':
             l = l.split('\t')
             toks  = t.tokenize(l.pop(0))
             noise_line(toks,l,dic,rep,app,seen,args)
+            print()
             nsents += 1
             ntokens += len(toks)
         sys.stderr.write('Found {} sentences\n'.format(nsents))

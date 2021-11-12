@@ -19,13 +19,31 @@ They both contain the same number of lines so that they are correctly aligned.
 
 ### Tokenize/encode and binarize the data
 
+[preprocess_dataset.py](./preprocess_dataset.py)
+
 ```
-python preprocess_dataset.py /path/to/other/data  -to /path/to/folder/bin
+python preprocess_dataset.py /path/to/other/data -to /path/to/folder/bin
 ```
 
-*data.fr* and *data.noise.fr* are tokenized with the *FlaubertTokenizer*, then binarized. A corresponding binary file is formated in such a way that:
+*data.fr* and *data.noise.fr* are tokenized with [tokenize.py](../tokenize.py) script ; while *data.tag.fr* is encoded with [taf_encoder.py](../taf_encoder.py). Each token/tag is represented by an integer, so the whole data can be an integer tensor. These representation are then binarized. A generated binary file is formated in such a way that:
 * The 50 first bytes correspond to an utf-8 string of metadata of format *\<vector shape tuple>@\<vector dtype>*. Example: *(2, 820, 134)@int64*.
 * The rest of the bytes are associated to the two vectors of values and masks.
-* The *GramercoDataset* class in [data.py](./data.py) is able to deduce the data tensors given the bin data path.
 
-*data.tag.fr* is encoded in a way so that every tag is associated to an integer. The given file is binarized as well.
+### Pytorch dataset loading
+
+The *GramercoDataset* class in [data.py](./data.py) is able to deduce the data tensors given the bin data path. It can be then passed to a Pytorch Dataloader to iterate over samples.
+
+A retrieved single data sample is a dictionary with the following tree hierarchy:
+- clean_data
+  - input_ids
+  - attention_mask
+- noise_data
+  - input_ids
+  - attention_mask
+- tag_data
+  - input_ids
+  - attention_mask
+
+Each leaf is a int64 tensor.
+- *input_ids* are is the values of the tokenized/encoded sentence/tags
+- *attention_mask* contains only 0's and 1's to recognize the existing tokens.

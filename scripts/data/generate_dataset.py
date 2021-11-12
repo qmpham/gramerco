@@ -8,8 +8,8 @@ import pyonmttok
 import logging
 from collections import defaultdict
 from tqdm import tqdm
-import pyonmttok
 import os
+import re
 
 separ = '￨'
 keep = '·'
@@ -20,6 +20,8 @@ def decode(line, get_tags=True):
     tuples = line.rstrip().split(' ')
     tuples = [t.split(separ) for t in tuples]
     text = ' '.join([t[0] for t in tuples])
+    text = re.sub(" '", "'", text)
+    text = re.sub("' ", "'", text)
     if get_tags:
         tags = ' '.join([separ.join(t[1:]) for t in tuples])
         return text, tags
@@ -42,13 +44,19 @@ def create_dataset(file, target_file):
             if line == '\n':
                 first = True
             elif first:
-                ref = decode(line, get_tags=False)
-                first = False
-            else:
                 if tags is not None:
                     file_clean.write('\n')
                     file_noise.write('\n')
                     file_tag.write('\n')
+                ref, tags = decode(line)
+                file_clean.write(ref)
+                file_noise.write(ref)
+                file_tag.write(tags)
+                first = False
+            else:
+                file_clean.write('\n')
+                file_noise.write('\n')
+                file_tag.write('\n')
                 text, tags = decode(line)
                 file_clean.write(ref)
                 file_noise.write(text)

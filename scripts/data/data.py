@@ -47,8 +47,8 @@ class GramercoDataset(Dataset):
                                 'attention_mask': self.clean_data['attention_mask'][idx]
                 },
                 'noise_data': {
-                                'input_ids': self.clean_data['input_ids'][idx],
-                                'attention_mask': self.clean_data['attention_mask'][idx]
+                                'input_ids': self.noise_data['input_ids'][idx],
+                                'attention_mask': self.noise_data['attention_mask'][idx]
                 },
                 'tag_data': {
                                 'input_ids': self.tag_data['input_ids'][idx],

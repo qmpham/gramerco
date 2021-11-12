@@ -4,7 +4,7 @@ DATA_DIR=../resources
 
 python noiser/noise_lex.py $DATA_DIR/Lexique383.tsv $DATA_DIR/fr_expl.txt > $DATA_DIR/fr_expl.lex
 python noiser/txt2dic.py < $DATA_DIR/fr_expl.txt > $DATA_DIR/fr_expl.dic
-python noiser/txt2app.py $DATA_DIR/Lexique383.tsv -pro -adv -pre -pun > $DATA_DIR/fr_expl.app
-python noiser/add_french_noise.py $DATA_DIR/fr_expl.lex -dic $DATA_DIR/fr_expl.dic -rep $DATA_DIR/Lexique383.tsv -app $DATA_DIR/fr_expl.app > $DATA_DIR/fr_expl.noise
+python noiser/txt2app.py $DATA_DIR/Lexique383.tsv -pro -adv -pre -pun > $DATA_DIR/lexique.app
+python noiser/add_french_noise.py $DATA_DIR/fr_expl.lex -dic $DATA_DIR/fr_expl.dic -rep $DATA_DIR/Lexique383.tsv -app $DATA_DIR/lexique.app > $DATA_DIR/fr_expl.noise
 python data/generate_dataset.py $DATA_DIR/fr_expl.noise -to $DATA_DIR/data
-python data/preprocess_dataset.py $DATA_DIR/data
+python data/preprocess_dataset.py $DATA_DIR/data -log debug -split train
