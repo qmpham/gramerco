@@ -1,5 +1,8 @@
-source ~/anaconda3/bin/activate gramerco-cpu
+source ~/anaconda3/bin/activate gramerco
 
+mkdir -p ../resources
+
+DATA_NAME=AFP
 DATA_DIR=../resources
 
 python noiser/noise_lex.py $DATA_DIR/Lexique383.tsv $DATA_DIR/fr_expl.txt > $DATA_DIR/fr_expl.lex
