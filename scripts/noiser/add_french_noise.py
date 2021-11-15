@@ -5,7 +5,6 @@ import argparse
 import sys
 import os
 import random
-import pyonmttok
 import logging
 from collections import defaultdict
 from tqdm import tqdm
@@ -393,7 +392,6 @@ if __name__ == '__main__':
     parser.add_argument('-log', default='info', help="Logging level [debug, info, warning, critical, error] (info)")
     args = parser.parse_args()
     create_logger('stderr',args.log)
-    # t = pyonmttok.Tokenizer("conservative", joiner_annotate=False)
     t = WordTokenizer(FlaubertTokenizer)
     dic = read_dic(args.dictionary_file)
     rep = read_rep(args.replace_file)
