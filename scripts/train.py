@@ -9,6 +9,7 @@ from data.data import GramercoDataset
 from model_gec.gec_bert import GecBertModel
 from tag_encoder import TagEncoder
 import logging
+import matplotlib.pyplot as plt
 
 
 def load_data(args):
@@ -35,17 +36,22 @@ def train(args):
 
             out = model(**batch["noise_data"])
 
-            logging.info("tag data lens = " + str(batch["tag_data"]["attention_mask"].sum(-1)))
-            logging.info("tag out lens = " + str(out["attention_mask"].sum(-1)))
+            # logging.info("tag data lens = " + str(batch["tag_data"]["attention_mask"].sum(-1)))
+            # logging.info("tag out lens = " + str(out["attention_mask"].sum(-1)))
 
             out = out["tag_out"][out["attention_mask"].bool()]
             tgt = batch["tag_data"]["input_ids"][batch["tag_data"]["attention_mask"].bool()]
+            logging.debug("TAGs out = " + str(out.data.argmax(-1)[:20]))
+            logging.debug("TAGs tgt = " + str(tgt.data[:20]))
             loss = criterion(out, tgt)
             losses.append(loss.item())
             loss.backward()
             optimizer.step()
 
+    logging.debug(out.detach().argmax(-1))
     logging.debug(losses)
+    # plt.plot(losses)
+    # plt.show()
 
 
 def create_logger(logfile, loglevel):
@@ -68,9 +74,9 @@ if __name__ == "__main__":
     parser.add_argument('-v', action='store_true')
     parser.add_argument('-log', default="info", help='logging level')
     parser.add_argument('-lang', '--language', default="fr", help='language of the data')
-    parser.add_argument('--batch-size', type=int, help='batch size for the training')
+    parser.add_argument('--batch-size', type=int, default=8, help='batch size for the training')
     parser.add_argument('--n-epochs', type=int, default=2, help='Number of epochs')
-    parser.add_argument('-lr', '--learning-rate', type=float, default=0.1, help='Learning rate value.')
+    parser.add_argument('-lr', '--learning-rate', type=float, default=0.001, help='Learning rate value.')
 
     args = parser.parse_args()
 
