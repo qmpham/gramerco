@@ -1,6 +1,7 @@
 from transformers import FlaubertTokenizer, FlaubertModel
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import logging
 import sys
@@ -16,12 +17,48 @@ except:
     from .utils import word_collate
 
 
+class LabelSmoothingLoss(torch.nn.Module):
+    def __init__(self, smoothing: float = 0.02, reduction="mean", weight=None):
+        super(LabelSmoothingLoss, self).__init__()
+        self.epsilon = smoothing
+        self.reduction = reduction
+        self.weight = weight
+
+    def reduce_loss(self, loss):
+        if self.reduction == "mean":
+            return loss.mean()
+        elif self.reduction == "sum":
+            return loss.sum()
+        else:
+            return loss
+
+    def linear_combination(self, x, y):
+        return self.epsilon * x + (1 - self.epsilon) * y
+
+    def forward(self, preds, target):
+        if self.weight is not None:
+            self.weight = self.weight.to(preds.device)
+
+        if self.training:
+            n = preds.size(-1)
+            log_preds = F.log_softmax(preds, dim=-1)
+            loss = self.reduce_loss(-log_preds.sum(dim=-1))
+            nll = F.nll_loss(
+                log_preds, target, reduction=self.reduction, weight=self.weight
+            )
+            return self.linear_combination(loss / n, nll)
+        else:
+            return torch.nn.functional.cross_entropy(preds, target, weight=self.weight)
+
+
+
 class GecBertModel(nn.Module):
     def __init__(self, num_tag, encoder_name="flaubert/flaubert_base_cased"):
         super(GecBertModel, self).__init__()
 
         self.tokenizer = FlaubertTokenizer.from_pretrained(encoder_name)
         self.encoder = FlaubertModel.from_pretrained(encoder_name)
+        self.ls = LabelSmoothingLoss(smoothing=0.1)
         self.num_tag = num_tag
         h_size = self.encoder.attentions[0].out_lin.out_features
         self.linear_layer = nn.Linear(h_size, num_tag)
@@ -52,7 +89,8 @@ class GecBertModel(nn.Module):
         attention_mask = torch.zeros_like(attention_mask_larger)
         attention_mask[:, 1:-1] = attention_mask_larger[:, 2:]
         out = self.linear_layer(h_w)
-        out = torch.softmax(out, -1)
+        # out = torch.softmax(out, -1)
+        out = self.ls(out)
         return {"tag_out": out, "attention_mask": attention_mask}
 
 
