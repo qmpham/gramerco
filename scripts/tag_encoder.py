@@ -9,8 +9,10 @@ from noiser.Noise import Spacy
 from collections import defaultdict
 try:
     from noiser.add_french_noise import read_rep, read_app
+    from noiser.Noise import Lexicon
 except:
     from .noiser.add_french_noise import read_rep, read_app
+    from .noiser.Noise import Lexicon
 
 separ = '￨'
 
@@ -24,6 +26,14 @@ class TagEncoder:
         f.close()
         rep = read_rep(path_to_lex)
         app = read_app(path_to_app)
+        lexicon = Lexicon(path_to_lex)
+
+        g_transforms = set()
+        for mot in lexicon.mot2linf:
+            for inf in lexicon.mot2linf[mot]:
+                tag = "$TRANSFORM_" + inf
+                g_transforms.add(tag)
+        g_transforms = sorted(g_transforms)
 
         self._id_to_tag = defaultdict(lambda: '·')
         self._tag_to_id = defaultdict(lambda: 0)
@@ -42,22 +52,8 @@ class TagEncoder:
                 for nombre in ["s", "p", "-"]:
                     self.add_tag("$TRANSFORM_" + separ.join([pos, genre, nombre]))
 
-        for pos in ["VER", "AUX"]:
-            self.add_tag("$TRANSFORM_" + separ.join([pos, "-", "-", "inf"]))
-
-            for genre in ["m", "f"]:
-                for nombre in ["s", "p"]:
-                    for tense in ["pas", "pre"]:
-                        self.add_tag("$TRANSFORM_" + separ.join([pos, genre, nombre, "par", tense]))
-
-            for tense in ["pas", "pre", "fut", "imp"]:
-                for nombre in ["s", "p"]:
-                    for pers in ["1", "2", "3"]:
-                        self.add_tag("$TRANSFORM_" + separ.join([pos, "-", "-", "ind", tense, pers + nombre]))
-
-            for nombre in ["s", "p"]:
-                for pers in ["1", "2", "3"]:
-                    self.add_tag("$TRANSFORM_" + separ.join([pos, "-", "-", "sub", "pre", pers + nombre]))
+        for tag in g_transforms:
+            self.add_tag(tag)
 
         for app_tok in app:
             self.add_tag("$APPEND_" + app_tok)
@@ -86,3 +82,15 @@ class TagEncoder:
 if __name__ == "__main__":
 
     tagger = TagEncoder()
+
+    from noiser.Noise import Lexicon
+    lexicon = Lexicon("../resources/Lexique383.tsv")
+
+    seen = set()
+    for mot in lexicon.mot2linf:
+        for inf in lexicon.mot2linf[mot]:
+            tag = "$TRANSFORM_" + inf
+            if tagger.tag_to_id(tag) == 0:
+                seen.add(tag)
+
+    print(seen)

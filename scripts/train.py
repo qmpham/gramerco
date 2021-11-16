@@ -50,6 +50,8 @@ def train(args):
 
     logging.debug(out.detach().argmax(-1))
     logging.debug(losses)
+
+    torch.save(model, os.path.join(args.save, 'model.pt'))
     # plt.plot(losses)
     # plt.show()
 
@@ -77,6 +79,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch-size', type=int, default=8, help='batch size for the training')
     parser.add_argument('--n-epochs', type=int, default=2, help='Number of epochs')
     parser.add_argument('-lr', '--learning-rate', type=float, default=0.001, help='Learning rate value.')
+    parser.add_argument('--save', help='save directory')
 
     args = parser.parse_args()
 
