@@ -1,4 +1,3 @@
-import pyonmttok
 from transformers import FlaubertTokenizer
 import os
 import sys
@@ -62,7 +61,7 @@ class TagEncoder:
         for app_tok in app:
             self.add_tag("$APPEND_" + app_tok)
 
-        for pos in rep["pos2mot"]:
+        for pos in rep["pos2mot"]: # ART + PRO + PRE + ADV
             for tok in rep["pos2mot"][pos]:
                 self.add_tag("$" + pos + "_" + tok)
 
