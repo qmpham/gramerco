@@ -7,7 +7,6 @@ import logging
 import sys
 import os
 pwd = os.path.dirname(__file__)
-print("pwd", pwd)
 sys.path.append(os.path.dirname(pwd))
 sys.path.append(os.path.dirname(os.path.abspath(pwd)))
 from data.data import GramercoDataset
@@ -90,7 +89,7 @@ class GecBertModel(nn.Module):
         attention_mask[:, 1:-1] = attention_mask_larger[:, 2:]
         out = self.linear_layer(h_w)
         # out = torch.softmax(out, -1)
-        out = self.ls(out)
+        # out = self.ls(out)
         return {"tag_out": out, "attention_mask": attention_mask}
 
 

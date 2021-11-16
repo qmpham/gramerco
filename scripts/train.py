@@ -6,7 +6,7 @@ import torch.optim as optim
 import argparse
 from tqdm import tqdm
 from data.data import GramercoDataset
-from model_gec.gec_bert import GecBertModel
+from model_gec.gec_bert import GecBertModel, LabelSmoothingLoss
 from tag_encoder import TagEncoder
 import logging
 import matplotlib.pyplot as plt
@@ -23,7 +23,7 @@ def load_data(args):
 def train(args):
     tagger = TagEncoder()
     train_dataloader = load_data(args)
-    criterion = nn.NLLLoss()
+    criterion = LabelSmoothingLoss(smoothing=0.02)
     model = GecBertModel(len(tagger))
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 

@@ -18,8 +18,34 @@ from transformers import FlaubertTokenizer
 import re
 
 
-def preprocess_txt_file(file, target_folder, tokenizer, target_filename):
-    path = os.path.join(target_folder, os.path.basename(target_filename) + '.bin')
+def partition(length: int, dev_size: float, test_size: float):
+    assert dev_size + test_size < 1.
+    idxs = np.arange(length)
+    np.random.shuffle(idxs)
+
+    idx_1 = int(test_size * length)
+    idx_2 = idx_1 + int(dev_size * length)
+
+    return {
+            "train":    idxs[idx_2:],
+            "dev":      idxs[idx_1:idx_2],
+            "test":     idxs[:idx_1]
+            }
+
+
+def save_format(path, ids, mask):
+    data = np.stack((ids, mask))
+    shape = data.shape
+    dtype = data.dtype
+    metadata = str(shape) + '@' + str(dtype)
+    metadata = metadata.ljust(50)
+    logging.debug('saving metadata of ' + os.path.basename(path) + ':' + metadata + '#' + str(len(metadata)))
+    with open(path, 'wb') as f:
+        f.write(bytes(metadata, 'utf-8') + data.tobytes())
+
+
+def preprocess_txt_file(file, target_folder, tokenizer, target_filename, split, noise="", split_indices=None):
+    path = os.path.join(target_folder, os.path.basename(target_filename) + '.{}{}.fr.bin')
 
     with open(file, 'r') as f:
         txt_list = f.read().split('\n')
@@ -30,31 +56,17 @@ def preprocess_txt_file(file, target_folder, tokenizer, target_filename):
         )
         logging.debug("data after tokenization")
         logging.debug(data)
-    data = np.stack((data['input_ids'], data['attention_mask']))
-    shape = data.shape
-    dtype = data.dtype
-    metadata = str(shape) + '@' + str(dtype)
-    metadata = metadata.ljust(50)
 
-    logging.debug('saving metadata of ' + os.path.basename(file) + ':' + metadata + '#' + str(len(metadata)))
-
-    with open(path, 'wb') as f:
-        f.write(bytes(metadata, 'utf-8') + data.tobytes())
-
-    # data = f.read()
-    # metadata = data[:50].decode('utf-8').split('|')
-    # raw = data[50:]
-    # logging.debug(raw)
-    # shape, dtype = None, None
-    # exec("shape = {}".format(metadata[0]))
-    # exec("dtype = {}".format(metadata[1]))
-    # data = torch.frombuffer(raw, dtype=dtype).reshape(shape)
-    # input_ids = data[0]
-    # attention_mask = data[1]
+    if split_indices is not None:
+        save_format(path.format("train", noise), data['input_ids'][split_idxs["train"]], data['attention_mask'][split_idxs["train"]])
+        save_format(path.format("dev", noise), data['input_ids'][split_idxs["dev"]], data['attention_mask'][split_idxs["dev"]])
+        save_format(path.format("test", noise), data['input_ids'][split_idxs["test"]], data['attention_mask'][split_idxs["test"]])
+    else:
+        save_format(path.format(split, noise), data['input_ids'], data['attention_mask'])
 
 
-def preprocess_tag_file(file, target_folder, target_filename, path_to_lex, path_to_app):
-    path = os.path.join(target_folder, os.path.basename(target_filename) + '.bin')
+def preprocess_tag_file(file, target_folder, target_filename, path_to_lex, path_to_app, split, split_indices=None):
+    path = os.path.join(target_folder, os.path.basename(target_filename) + '.{}.tag.fr.bin')
 
     tag_encoder = TagEncoder()
 
@@ -69,16 +81,13 @@ def preprocess_tag_file(file, target_folder, target_filename, path_to_lex, path_
     for i in range(len(txt_list)):
         ids[i, :lens[i]] = np.array([tag_encoder.tag_to_id(tag) for tag in txt_list[i].split(' ')], dtype=np.int64)
         mask[i, :lens[i]] = 1
-    data = np.stack((ids, mask))
-    shape = data.shape
-    dtype = data.dtype
-    metadata = str(shape) + '@' + str(dtype)
-    metadata = metadata.ljust(50)
 
-    logging.debug('saving metadata of ' + os.path.basename(file) + ':' + metadata + '#' + str(len(metadata)))
-
-    with open(path, 'wb') as f:
-        f.write(bytes(metadata, 'utf-8') + data.tobytes())
+    if split_indices is not None:
+        save_format(path.format("train"), ids[split_idxs["train"]], mask[split_idxs["train"]])
+        save_format(path.format("dev"), ids[split_idxs["dev"]], mask[split_idxs["dev"]])
+        save_format(path.format("test"), ids[split_idxs["test"]], mask[split_idxs["test"]])
+    else:
+        save_format(path.format(split), idxs, mask)
 
 
 def create_logger(logfile, loglevel):
@@ -114,7 +123,15 @@ if __name__ == '__main__':
 
     tokenizer = FlaubertTokenizer.from_pretrained("flaubert/flaubert_base_cased")
 
+    if args.split == "all":
+        f = open(args.file + '.tag.fr', 'r')
+        length = len(f.readlines())
+        f.close()
+        split_idxs = partition(length, dev_size=0.1, test_size=0.1)
+    else:
+        split_idxs = None
 
-    preprocess_txt_file(args.file + '.fr', args.to, tokenizer, args.file + '.' + args.split + '.fr')
-    preprocess_txt_file(args.file + '.noise.fr', args.to, tokenizer, args.file + '.' + args.split + '.noise.fr')
-    preprocess_tag_file(args.file + '.tag.fr', args.to, args.file + '.' + args.split + '.tag.fr', args.lex, args.app)
+
+    preprocess_txt_file(args.file + '.fr', args.to, tokenizer, args.file, args.split, noise="", split_indices=split_idxs)
+    preprocess_txt_file(args.file + '.noise.fr', args.to, tokenizer, args.file, args.split, noise=".noise", split_indices=split_idxs)
+    preprocess_tag_file(args.file + '.tag.fr', args.to, args.file, args.lex, args.app, args.split, split_indices=split_idxs)

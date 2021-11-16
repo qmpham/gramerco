@@ -12,29 +12,48 @@ from tokenizer import WordTokenizer
 import logging
 import matplotlib.pyplot as plt
 from noiser.Noise import Lexicon
+import os
+import sys
+import re
+
+
+separ = '￨'
 
 
 def g_transform(tok, tag, lexicon):
     if tok in lexicon.mot2linf:
         if tok in lexicon.mot2llempos:
-            lem = lexicon.mot2llempos[tok]
-            if lem in lexicon.lem2lmot:
-                mots = lexicon.lem2lmot[lem]
-                for mot in mots:
-                    if tag in lexicon.mot2linf[mot]:
-                        return mot
+            lems = lexicon.mot2llempos[tok]
+            for lem in lems:
+                lem = lem.split(separ)[0]
+                if lem in lexicon.lem2lmot:
+                    mots = lexicon.lem2lmot[lem]
+                    for mot in mots:
+                        if tag in lexicon.mot2linf[mot]:
+                            return mot
     return tok
 
 
 def apply_tags(sentence: str, tags: torch.LongTensor, tokenizer: WordTokenizer, tagger: TagEncoder, lexicon: Lexicon):
 
-    assert len(sentence) == len(tags)
+    toks = tokenizer.tokenize(sentence, max_length=510)
+    # logging.info("-----------------------")
+    # logging.info(sentence)
+    # logging.info([tagger.id_to_tag(tag.item()) for tag in tags])
+    # logging.info(len(toks))
+    # logging.info(len(tags))
 
-    toks = tokenizer.tokenize(sentence)
+    if len(toks) != len(tags):
+        logging.info(len(toks))
+        logging.info(len(tags))
+        toks, tags = toks[:len(tags)], tags[:len(toks)]
+
+    assert len(toks) == len(tags)
+
     new_toks = list()
     i = 0
     while i < len(toks):
-        tag = tagger.id_to_tag[tags[i].item()]
+        tag = tagger.id_to_tag(tags[i].item())
         if tag == '·': # keep
             new_toks.append(toks[i])
         elif "$APPEND_" in tag:
@@ -43,7 +62,8 @@ def apply_tags(sentence: str, tags: torch.LongTensor, tokenizer: WordTokenizer, 
         elif tag == "$DELETE" or tag == "$COPY":
             pass
         elif tag == "$SWAP":
-            new_toks.append(toks[i+1])
+            if i != len(toks) - 1:
+                new_toks.append(toks[i+1])
             new_toks.append(toks[i])
             i = i + 1
         elif tag == "$CASE":
@@ -55,10 +75,16 @@ def apply_tags(sentence: str, tags: torch.LongTensor, tokenizer: WordTokenizer, 
             for t in  toks[i].split('-'):
                 new_toks.append(t)
         elif tag == "$MERGE":
-            new_toks.append(toks[i] + toks[i+1])
+            if i != len(toks) - 1:
+                new_toks.append(toks[i] + toks[i+1])
+            else:
+                new_toks.append(toks[i])
             i += 1
         elif tag == "$HYPHEN":
-            new_toks.append(toks[i] + '-' + toks[i+1])
+            if i != len(toks) - 1:
+                new_toks.append(toks[i] + '-' + toks[i+1])
+            else:
+                new_toks.append(toks[i])
             i += 1
         elif "$ART" == tag[:4] or "$PRO" == tag[:4] or "$PRE" == tag[:4] or "$ADV" == tag[:4]:
             new_toks.append(tag.split('_')[-1])
@@ -69,27 +95,45 @@ def apply_tags(sentence: str, tags: torch.LongTensor, tokenizer: WordTokenizer, 
 
         i += 1
 
-    return sentence
+
+    # logging.info(len(new_toks))
+    new_sentence = ' '.join(new_toks[:510])
+    new_sentence = re.sub("' ", "'", new_sentence)
+
+    # logging.info(new_sentence)
+    # logging.info("**********************")
+
+    return new_sentence
 
 
-def infer(args):
+def infer(args, text=""):
     tagger = TagEncoder()
-    model = torch.load(args.save) if os.isfile(args.save) else GecBertModel(len(tagger))
+    model = torch.load(args.load) if os.path.isfile(args.load) else GecBertModel(len(tagger))
     model.eval()
     tokenizer = FlaubertTokenizer.from_pretrained("flaubert/flaubert_base_cased")
     word_tokenizer = WordTokenizer(FlaubertTokenizer)
     lexicon = Lexicon(args.lex)
 
-    txt = args.text.split('\n')
+    logging.info(text)
+
+    txt = text.split('\n')
+    # logging.info("-----------------------")
+    # logging.info(txt)
+    # logging.info([tagger.id_to_tag(tag.item()) for tag in tags])
+    # logging.info(len(toks))
+    # logging.info(len(tags))
 
     for i in range(len(txt) // args.batch_size + 1):
-        batch_txt = txt[args.batch_size * i: min(args.batch_size * (i + 1), len(batch_txt))]
+        batch_txt = txt[args.batch_size * i: min(args.batch_size * (i + 1), len(txt))]
         for j in range(args.num_iter):
             toks = tokenizer(
                 batch_txt,
                 return_tensors="pt",
-                padding=True
+                padding=True,
+                truncation=True,
+                max_length=510
             )
+            logging.info(toks["input_ids"].shape)
             with torch.no_grad():
                 out = model(**toks) # tag_out, attention_mask
                 for k, t in enumerate(batch_txt):
@@ -97,7 +141,8 @@ def infer(args):
                                         t,
                                         out["tag_out"][k].argmax(-1)[out["attention_mask"][k].bool()],
                                         word_tokenizer,
-                                        tagger
+                                        tagger,
+                                        lexicon
                                     )
         print('\n'.join(batch_txt))
 
@@ -117,17 +162,18 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('text', help="Input file/s")
+    parser.add_argument('--text', default=None, help="Input file")
     ### optional
     parser.add_argument('-v', action='store_true')
     parser.add_argument('-log', default="info", help='logging level')
     parser.add_argument('-lang', '--language', default="fr", help='language of the data')
-    parser.add_argument('--batch-size', type=int, default=8, help='batch size for the training')
-    parser.add_argument('--save', help='model save directory')
+    parser.add_argument('--batch-size', type=int, default=8, help='batch size for eval')
+    parser.add_argument('--num-iter', type=int, default=4, help='num iteration loops to edit')
+    parser.add_argument('--load', default='', help='model save directory')
     parser.add_argument('--lex', default='../resources/Lexique383.tsv', help='path to lexicon table')
 
     args = parser.parse_args()
 
     create_logger("stderr", args.log)
 
-    train(args)
+    infer(args, text=sys.stdin.read() if args.text is None else args.text)
