@@ -16,4 +16,4 @@ python noiser/txt2dic.py < $DATA_RAW/*.txt > $DATA_LEX/$DATA_NAME.dic
 python noiser/txt2app.py $DATA_DIR/Lexique383.tsv -pro -adv -pre -pun > $DATA_LEX/lexique.app
 python noiser/add_french_noise.py $DATA_LEX/$DATA_NAME.lex -dic $DATA_LEX/$DATA_NAME.dic -rep $DATA_DIR/Lexique383.tsv -app $DATA_LEX/lexique.app > $DATA_LEX/$DATA_NAME.noise
 python data/generate_dataset.py $DATA_LEX/$DATA_NAME.noise -to $DATA_NOISE/$DATA_NAME
-python data/preprocess_dataset.py $DATA_NOISE/$DATA_NAME -log debug -split train -to $DATA_BIN/$DATA_NAME
+python data/preprocess_dataset.py $DATA_NOISE/$DATA_NAME -log debug -split all -to $DATA_BIN/$DATA_NAME
