@@ -4,7 +4,6 @@
 import argparse
 import sys
 import random
-import pyonmttok
 import logging
 from collections import defaultdict
 from tqdm import tqdm

@@ -1,4 +1,3 @@
-import pyonmttok
 from transformers import FlaubertTokenizer
 import re
 
@@ -39,16 +38,7 @@ if __name__ == "__main__":
 
     text = "Je l'appelle Maxime"
 
-    # t = pyonmttok.Tokenizer("conservative", joiner_annotate=False)
-    # toks, _ = t.tokenize(text)
-    # print(toks)
-
-    # t_flaub = FlaubertTokenizer.from_pretrained("flaubert/flaubert_base_cased")
-    # toks_id = t_flaub(text, padding=True)["input_ids"]
-    # toks = [t_flaub._convert_id_to_token(tid) for tid in toks_id]
-    # print(toks)
     print(text)
     t_word = WordTokenizer(FlaubertTokenizer)
     toks = t_word.tokenize(text)
     print(toks)
-    
