@@ -51,6 +51,3 @@ if __name__ == '__main__':
             ntoks += len(toks)
         logging.info('Found {} sentences with {} tokens'.format(nsents,ntoks))
         n.stats()
-        
-        
-        

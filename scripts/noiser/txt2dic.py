@@ -4,8 +4,9 @@
 import sys
 import argparse
 import logging
-import pyonmttok
 from add_french_noise import create_logger
+from tokenizer import WordTokenizer
+from transformers import FlaubertTokenizer
 from collections import defaultdict
 from tqdm import tqdm
 
@@ -18,23 +19,24 @@ if __name__ == '__main__':
     args = parser.parse_args()
     create_logger('stderr',args.log)
 
-    t = pyonmttok.Tokenizer("conservative", joiner_annotate=False)
+    # t = pyonmttok.Tokenizer("conservative", joiner_annotate=False)
+    t = WordTokenizer(FlaubertTokenizer)
     nsents = 0
     ntokens = 0
     dic = defaultdict(float)
     for l in sys.stdin:
-        toks, _ = t.tokenize(l.rstrip())
+        # toks, _ = t.tokenize(l.rstrip())
+        toks = t.tokenize(l.rstrip())
         for tok in toks:
             dic[tok] += 1
-        nsents += 1
+        if toks:
+            nsents += 1
         ntokens += len(toks)
     sys.stderr.write('Found {} sentences with {} words. Total vocab is {}\n'.format(nsents, ntokens, len(dic)))
     N = 0
-    for w,n in sorted(dic.items(), key=lambda kv: kv[1], reverse=True):
+    for w,n in tqdm(sorted(dic.items(), key=lambda kv: kv[1], reverse=True)):
         if n < args.min_freq:
             break
         print('{} {}'.format(w,n/ntokens))
         N += 1
-    sys.stderr.write('Output vocab is {}\n'.format(N))        
-        
-        
+    sys.stderr.write('Output vocab is {}\n'.format(N))
