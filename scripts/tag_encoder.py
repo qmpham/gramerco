@@ -5,6 +5,7 @@ pwd = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(pwd))
 sys.path.append(os.path.dirname(os.path.abspath(pwd)))
 from noiser.Noise import Spacy
+import torch
 from collections import defaultdict
 try:
     from noiser.add_french_noise import read_rep, read_app
@@ -60,6 +61,9 @@ class TagEncoder:
         for pos in rep["pos2mot"]: # ART + PRO + PRE + ADV
             for tok in rep["pos2mot"][pos]:
                 self.add_tag("$" + pos + "_" + tok)
+
+    def encode_line(self, line):
+        return torch.tensor(list(map(self.tag_to_id, line.split(" "))), dtype=torch.int64)
 
     def id_to_tag(self, i):
         return self._id_to_tag[i]

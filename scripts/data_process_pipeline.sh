@@ -33,6 +33,9 @@ mkdir -p $DATA_BIN
 
 # python data/generate_dataset.py $DATA_LEX/$DATA_NAME.noise -to $DATA_NOISE/$DATA_NAME
 
-python data/split.py $DATA_NOISE/$DATA_NAME
+# python data/split.py $DATA_NOISE/$DATA_NAME
 
-# python data/preprocess_dataset.py $DATA_NOISE/$DATA_NAME -log debug -split all -to $DATA_BIN/$DATA_NAME -app $DATA_LEX/lexique.app -lex $DATA_DIR/Lexique383.tsv
+# python data/preprocess.py $DATA_NOISE/$DATA_NAME.train -log info -lex $DATA_DIR/Lexique383.tsv -app $DATA_LEX/lexique.app --num-workers 16 -out $DATA_BIN/$DATA_NAME.train
+
+# python data/preprocess.py $DATA_NOISE/$DATA_NAME.dev -log info -lex $DATA_DIR/Lexique383.tsv -app $DATA_LEX/lexique.app --num-workers 16 -out $DATA_BIN/$DATA_NAME.dev
+python data/preprocess.py $DATA_NOISE/$DATA_NAME.test -log info -lex $DATA_DIR/Lexique383.tsv -app $DATA_LEX/lexique.app --num-workers 16 -out $DATA_BIN/$DATA_NAME.test

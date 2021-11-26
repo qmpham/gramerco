@@ -4,7 +4,9 @@ import re
 
 class WordTokenizer:
     def __init__(self, cls_tokenizer):
-        self.subword_tokenizer = cls_tokenizer.from_pretrained("flaubert/flaubert_base_cased")
+        self.subword_tokenizer = cls_tokenizer.from_pretrained(
+            "flaubert/flaubert_base_cased"
+        )
 
     def tokenize(self, text, n_pass=1, max_length=None):
         for i in range(n_pass):
@@ -12,7 +14,7 @@ class WordTokenizer:
         return toks
 
     def unite_tokens(self, tokens):
-        text = ' '.join(toks)
+        text = " ".join(toks)
         text = re.sub(" '", "'", text)
         return text
 
@@ -22,13 +24,13 @@ class WordTokenizer:
         if max_length:
             toks = toks[:max_length]
         final_toks = list()
-        current_word = ''
+        current_word = ""
         for tok in toks:
             if tok == "'</w>":
                 current_word += "'"
-            elif tok[-4:] == '</w>':
+            elif tok[-4:] == "</w>":
                 final_toks.append(current_word + tok[:-4])
-                current_word = ''
+                current_word = ""
             else:
                 current_word += tok
 
