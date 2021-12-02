@@ -35,7 +35,6 @@ mkdir -p $DATA_BIN
 
 # python data/split.py $DATA_NOISE/$DATA_NAME
 
-# python data/preprocess.py $DATA_NOISE/$DATA_NAME.train -log info -lex $DATA_DIR/Lexique383.tsv -app $DATA_LEX/lexique.app --num-workers 16 -out $DATA_BIN/$DATA_NAME.train
-
+python data/preprocess.py $DATA_NOISE/$DATA_NAME.train -log info -lex $DATA_DIR/Lexique383.tsv -app $DATA_LEX/lexique.app --num-workers 16 -out $DATA_BIN/$DATA_NAME.train
 # python data/preprocess.py $DATA_NOISE/$DATA_NAME.dev -log info -lex $DATA_DIR/Lexique383.tsv -app $DATA_LEX/lexique.app --num-workers 16 -out $DATA_BIN/$DATA_NAME.dev
-python data/preprocess.py $DATA_NOISE/$DATA_NAME.test -log info -lex $DATA_DIR/Lexique383.tsv -app $DATA_LEX/lexique.app --num-workers 16 -out $DATA_BIN/$DATA_NAME.test
+# python data/preprocess.py $DATA_NOISE/$DATA_NAME.test -log info -lex $DATA_DIR/Lexique383.tsv -app $DATA_LEX/lexique.app --num-workers 16 -out $DATA_BIN/$DATA_NAME.test

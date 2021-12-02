@@ -31,7 +31,7 @@ logger = logging.getLogger("fairseq_cli.preprocess")
 def binarize_func(
     filename, vocab, output_prefix, lang, offset, end, wid, append_eos=True
 ):
-
+    logging.info(output_prefix + "    " + str(wid))
     ds = indexed_dataset.make_builder(
         output_prefix + "." + lang + "." + str(wid) + ".bin",
         impl="mmap",
@@ -45,7 +45,6 @@ def binarize_func(
         filename, vocab, consumer, append_eos=append_eos, offset=offset, end=end
     )
     ds.finalize(output_prefix + "." + lang + "." + str(wid) + ".idx")
-    logging.info(output_prefix)
     return res
 
 
@@ -59,16 +58,16 @@ def make_binary_dataset(vocab, input_prefix, output_prefix, lang, num_workers):
         replaced.update(worker_result["replaced"])
         n_seq_tok[0] += worker_result["nseq"]
         n_seq_tok[1] += worker_result["ntok"]
-        logging.info(replaced)
 
     input_file = "{}{}".format(input_prefix, ("." + lang) if lang is not None else "")
     offsets = find_offsets(input_file, num_workers)
-    logging.info(offsets)
+    # logging.info(offsets)
     (first_chunk, *more_chunks) = zip(offsets, offsets[1:])
     pool = None
     if num_workers > 1:
         pool = Pool(processes=num_workers - 1)
         for worker_id, (start_offset, end_offset) in enumerate(more_chunks, start=1):
+            # merge_result(binarize_func(input_file, vocab, output_prefix, lang, start_offset, end_offset, worker_id))
             pool.apply_async(
                 binarize_func,
                 (
@@ -83,10 +82,11 @@ def make_binary_dataset(vocab, input_prefix, output_prefix, lang, num_workers):
                 callback=merge_result,
             )
         pool.close()
-
+    logging.info(output_prefix + "." + lang + ".bin")
     ds = indexed_dataset.make_builder(
         output_prefix + "." + lang + ".bin", impl="mmap", vocab_size=len(vocab),
     )
+
     merge_result(
         Binarizer.binarize(
             input_file,

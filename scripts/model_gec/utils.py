@@ -22,18 +22,18 @@ def word_collate(x, word_index, max_len=2, agregation="sum"):
     _, c = torch.unique_consecutive(word_index, return_counts=True, dim=None)
 
     z = F.conv1d(
-        word_index.view(bsz, 1, -1),
-        torch.tensor([-1, 1], device=word_index.device).view(1, 1, -1),
+        word_index.view(bsz, 1, -1).float(),
+        torch.tensor([-1, 1], device=word_index.device).float().view(1, 1, -1),
         padding="valid",
     )
-    z = 1 - F.pad(z, (1, 1), "constant", 1)[:, :, :-1]
+    z = 1. - F.pad(z, (1, 1), "constant", 1)[:, :, :-1]
     zz = z
     for _ in range(c.max().item()):
         z = F.pad(
             (
                 F.conv1d(
-                    z,
-                    torch.tensor([1, 1], device=word_index.device).view(1, 1, -1),
+                    z.float(),
+                    torch.tensor([1, 1], device=word_index.device).float().view(1, 1, -1),
                     padding="valid",
                 )
                 == 2
@@ -44,11 +44,15 @@ def word_collate(x, word_index, max_len=2, agregation="sum"):
         )[:, :, :-1]
         zz = torch.hstack([zz, z])
     zr = zz.sum(-2)
-    idxs_y = word_index * c.max() + zr
+    idxs_y = (word_index * c.max() + zr).long()
     e = torch.zeros(
-        bsz, c.max().item() * max_len_word_seq, h, device=x.device, dtype=x.dtype
-    )
-    idxs_x = torch.arange(bsz).unsqueeze(-1).expand(bsz, L)
+        bsz,
+        c.max().item() *
+        max_len_word_seq,
+        h,
+        device=x.device,
+        dtype=x.dtype)
+    idxs_x = torch.arange(bsz).unsqueeze(-1).expand(bsz, L).long()
     e[idxs_x, idxs_y] = x
     res = e.view(bsz, max_len_word_seq, c.max(), h)
     if agregation == "sum":
