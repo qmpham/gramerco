@@ -10,10 +10,14 @@ SAVE_PATH=$DATA_DIR/models/gramerco-fr
 mkdir -p $SAVE_PATH
 mkdir -p $SAVE_PATH/tensorboard
 
-CUDA_LAUNCH_BLOCKING=1 PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:50 \
+CUDA_VISIBLE_DEVICES=0 \
+CUDA_LAUNCH_BLOCKING=1 \
+PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:200 \
 python train.py $DATA_BIN/$DATA_NAME \
       --log DEBUG \
+      --model-type decision2 \
       --save $SAVE_PATH \
+      --continue-from none \
       --lex $DATA_DIR/Lexique383.tsv \
       --app $DATA_DIR/$DATA_NAME/$DATA_NAME-lex/lexique.app \
       --tokenizer flaubert/flaubert_base_cased \
@@ -24,9 +28,9 @@ python train.py $DATA_BIN/$DATA_NAME \
       --max-sentences 128 \
       --required-batch-size-multiple 8 \
       --max-positions 510 \
-      --n-epochs 20 \
-      -lr 0.0001 \
-      --valid-iter 1000000  \
+      --n-epochs 1 \
+      -lr 0.00001 \
+      --valid-iter 5000  \
       --early-stopping 5 \
       --gpu \
       --ignore-clean \

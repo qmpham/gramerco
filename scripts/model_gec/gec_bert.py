@@ -17,41 +17,6 @@ except BaseException:
     from .utils import word_collate
 
 
-class LabelSmoothingLoss(torch.nn.Module):
-    def __init__(self, smoothing: float = 0.02, reduction="mean", weight=None):
-        super(LabelSmoothingLoss, self).__init__()
-        self.epsilon = smoothing
-        self.reduction = reduction
-        self.weight = weight
-
-    def reduce_loss(self, loss):
-        if self.reduction == "mean":
-            return loss.mean()
-        elif self.reduction == "sum":
-            return loss.sum()
-        else:
-            return loss
-
-    def linear_combination(self, x, y):
-        return self.epsilon * x + (1 - self.epsilon) * y
-
-    def forward(self, preds, target):
-        if self.weight is not None:
-            self.weight = self.weight.to(preds.device)
-
-        if self.training:
-            n = preds.size(-1)
-            log_preds = F.log_softmax(preds, dim=-1)
-            loss = self.reduce_loss(-log_preds.sum(dim=-1))
-            nll = F.nll_loss(
-                log_preds, target, reduction=self.reduction, weight=self.weight
-            )
-            return self.linear_combination(loss / n, nll)
-        else:
-            return torch.nn.functional.cross_entropy(
-                preds, target, weight=self.weight)
-
-
 class GecBertModel(nn.Module):
     def __init__(
         self,
@@ -59,6 +24,8 @@ class GecBertModel(nn.Module):
         encoder_name="flaubert/flaubert_base_cased",
         tokenizer=None,
         tagger=None,
+        mid=None,
+        freeze_encoder=False,
     ):
         super(GecBertModel, self).__init__()
 
@@ -66,10 +33,11 @@ class GecBertModel(nn.Module):
             tokenizer if tokenizer else FlaubertTokenizer.from_pretrained(encoder_name))
         self.encoder = FlaubertModel.from_pretrained(
             encoder_name)
-        self.ls = LabelSmoothingLoss(smoothing=0.1)
         self.num_tag = num_tag
         h_size = self.encoder.attentions[0].out_lin.out_features
         self.linear_layer = nn.Linear(h_size, num_tag)
+        self.id = mid
+        self.freeze_encoder = freeze_encoder
 
     def _tokenize_text(self, texts):
         return self.tokenizer(texts, return_tensors="pt", padding=True)
@@ -94,7 +62,11 @@ class GecBertModel(nn.Module):
         return torch.cumsum(word_ends, -1)
 
     def forward(self, **inputs):
-        h = self.encoder(**inputs)
+        if self.freeze_encoder:
+            with torch.no_grad():
+                h = self.encoder(**inputs)
+        else:
+            h = self.encoder(**inputs)
 
         word_index = self._generate_word_index(
             inputs["input_ids"]).to(h.last_hidden_state.device)
@@ -111,6 +83,63 @@ class GecBertModel(nn.Module):
         # out = torch.softmax(out, -1)
         # out = self.ls(out)
         return {"tag_out": out, "attention_mask": attention_mask}
+
+    def parameters(self):
+        if self.freeze_encoder:
+            return self.linear_layer.parameters()
+        return super().parameters()
+
+
+class GecBert2DecisionsModel(GecBertModel):
+
+    def __init__(
+        self,
+        num_tag,
+        encoder_name="flaubert/flaubert_base_cased",
+        tokenizer=None,
+        tagger=None,
+        mid=None,
+        freeze_encoder=False,
+    ):
+        super(GecBert2DecisionsModel, self).__init__(
+            num_tag,
+            encoder_name=encoder_name,
+            tokenizer=tokenizer,
+            tagger=tagger,
+            mid=mid,
+            freeze_encoder=freeze_encoder
+        )
+
+        h_size = self.encoder.attentions[0].out_lin.out_features
+        self.linear_layer = nn.Linear(h_size, num_tag - 1)
+        self.decision_layer = nn.Linear(h_size, 2)
+
+    def forward(self, **inputs):
+        if self.freeze_encoder:
+            with torch.no_grad():
+                h = self.encoder(**inputs)
+        else:
+            h = self.encoder(**inputs)
+
+        word_index = self._generate_word_index(
+            inputs["input_ids"]).to(h.last_hidden_state.device)
+
+        h_w = word_collate(h.last_hidden_state, word_index)
+
+        attention_mask_larger = word_collate(
+            inputs["attention_mask"].unsqueeze(-1), word_index, agregation="max"
+        ).squeeze(-1)
+        attention_mask = torch.zeros_like(
+            attention_mask_larger).to(h.last_hidden_state.device)
+        attention_mask[:, 1:-1] = attention_mask_larger[:, 2:]
+        out = self.linear_layer(h_w)
+        out_decision = self.decision_layer(h_w)
+        # out = torch.softmax(out, -1)
+        # out = self.ls(out)
+        return {
+            "tag_out": out,
+            "decision_out": out_decision,
+            "attention_mask": attention_mask}
 
 
 def create_logger(logfile, loglevel):

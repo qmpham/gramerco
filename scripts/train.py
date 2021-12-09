@@ -2,29 +2,41 @@ import torch
 from torch.utils.data import DataLoader
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
+import numpy as np
 
 from tqdm import tqdm
 from data.gramerco_dataset import GramercoDataset, make_dataset_from_prefix
 from fairseq.data import iterators, data_utils
 import fairseq.utils as fairseq_utils
-from model_gec.gec_bert import GecBertModel, LabelSmoothingLoss
+from model_gec.gec_bert import GecBertModel, GecBert2DecisionsModel
+from model_gec.criterions import DecisionLoss, CompensationLoss, CrossEntropyLoss
 from transformers import FlaubertTokenizer
 from tag_encoder import TagEncoder
 
 import os
 import sys
+import time
 from utils import EarlyStopping
 import shutil
 import argparse
 import logging
 
 
-def make_iterator(dataset, args, is_eval=False):
+def make_iterator(dataset, args, is_eval=False, max_sentences=None):
     with data_utils.numpy_seed(args.seed):
         indices = dataset.ordered_indices()
 
     # filter sentences too long
     indices, _ = dataset.filter_indices_by_size(indices, args.max_positions)
+
+    if max_sentences:
+        ii = np.arange(len(indices))
+        with data_utils.numpy_seed(args.seed):
+            np.random.shuffle(ii)
+
+        indices = indices[
+            np.sort(ii[:max_sentences])
+        ]
 
     # implicit batch size
     batch_sampler = dataset.batch_by_size(
@@ -68,7 +80,11 @@ def load_data(args, tagger, tokenizer):
             tokenizer,
             ignore_clean=args.ignore_clean
         )
-        valid_iter = make_iterator(valid_dataset, args, is_eval=True)
+        valid_iter = make_iterator(
+            valid_dataset,
+            args,
+            is_eval=True,
+            max_sentences=50000)
     else:
         valid_iter = None
 
@@ -80,7 +96,11 @@ def load_data(args, tagger, tokenizer):
             tokenizer,
             ignore_clean=args.ignore_clean
         )
-        test_iter = make_iterator(test_dataset, args, is_eval=True)
+        test_iter = make_iterator(
+            test_dataset,
+            args,
+            is_eval=True,
+            max_sentences=50000)
     else:
         test_iter = None
 
@@ -95,33 +115,86 @@ def train(args, device):
         path_to_app=args.path_to_app
     )
 
-    model = GecBertModel(
-        len(tagger),
-        tagger=tagger,
-        tokenizer=tokenizer).to(device)
-    train_iter, valid_iter, test_iter = load_data(args, tagger, tokenizer)
-    criterion = LabelSmoothingLoss(smoothing=0.02)
+    if args.continue_from and os.path.isfile(
+        os.path.join(
+            args.save,
+            args.continue_from,
+            "model_best.pt")):
+        logging.info(
+            "continue from " +
+            os.path.join(
+                args.save,
+                args.continue_from,
+                "model_best.pt"))
+        model = torch.load(
+            os.path.join(
+                args.save,
+                args.continue_from,
+                "model_best.pt"))
+    else:
+        if args.model_type in ["decision2"]:
+            model = GecBert2DecisionsModel(
+                len(tagger),
+                tagger=tagger,
+                tokenizer=tokenizer,
+                mid=str(int(time.time())),
+                freeze_encoder=args.freeze_encoder,
+            ).to(device)
+        else:
+            model = GecBertModel(
+                len(tagger),
+                tagger=tagger,
+                tokenizer=tokenizer,
+                mid=str(int(time.time())),
+                freeze_encoder=args.freeze_encoder,
+            ).to(device)
+        os.mkdir(os.path.join(args.save, model.id))
+        if args.tensorboard:
+            os.mkdir(os.path.join(args.save, "tensorboard", model.id))
 
+    train_iter, valid_iter, test_iter = load_data(args, tagger, tokenizer)
+    # criterion = LabelSmoothingLoss(smoothing=0.02)
+    if args.model_type == "normal1":
+        criterion = CrossEntropyLoss(label_smoothing=0.02)
+    elif args.model_type == "decision2":
+        criterion = DecisionLoss(label_smoothing=0.02)
+    elif args.model_type == "compensation1":
+        criterion = CompensationLoss(label_smoothing=0.02)
+    else:
+        raise ValueError("No corresponding loss found!")
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
     if args.tensorboard:
-        writer = SummaryWriter(log_dir=os.path.join(args.save, "tensorboard")
+        writer = SummaryWriter(log_dir=os.path.join(
+            args.save, "tensorboard", model.id
+        ))
     if args.valid:
-        stopper=EarlyStopping(patience=args.early_stopping)
+        stopper = EarlyStopping(patience=args.early_stopping)
     else:
-        stopper=None
+        stopper = None
 
-    torch.save(model, os.path.join(args.save, "model_best.pt"))
+    torch.save(
+        {
+            "num_iter": 0,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+        },
+        os.path.join(
+            args.save,
+            model.id,
+            "model_best.pt"
+        )
+    )
 
-    num_iter=0
+    num_iter = 0
     for epoch in range(args.n_epochs):
         logging.debug("EPOCH " + str(epoch))
-        train_bs=train_iter.next_epoch_itr(shuffle=True)
+        train_bs = train_iter.next_epoch_itr(shuffle=True)
         if device == "cuda":
             torch.cuda.empty_cache()
         for batch in tqdm(train_bs):
             if device == "cuda":
-                batch=fairseq_utils.move_to_cuda(batch)
+                batch = fairseq_utils.move_to_cuda(batch)
                 # logging.debug(torch.cuda.memory_allocated(device))
                 if num_iter + 1 % 10 == 0:
                     torch.cuda.empty_cache()
@@ -139,69 +212,30 @@ def train(args, device):
             #               str(batch["tag_data"]["input_ids"].shape)
             #               )
             # logging.debug(batch["tag_data"]["attention_mask"].sum(-1))
-            try:
-                out=model(**batch["noise_data"])
-                # logging.debug("tag out " + str(out["tag_out"].shape))
-                # logging.debug(out["attention_mask"].sum(-1))
 
-                sizes_out=out["attention_mask"].sum(-1)
-                sizes_tgt=batch["tag_data"]["attention_mask"].sum(-1)
-                coincide_mask=sizes_out == sizes_tgt
+            out = model(**batch["noise_data"])
+            # logging.debug("tag out " + str(out["tag_out"].shape))
+            # logging.debug(out["attention_mask"].sum(-1))
 
-                out=out["tag_out"][coincide_mask][out["attention_mask"]
-                                                    [coincide_mask].bool()]
+            sizes_out = out["attention_mask"].sum(-1)
+            sizes_tgt = batch["tag_data"]["attention_mask"].sum(-1)
+            coincide_mask = sizes_out == sizes_tgt
 
-                tgt=batch["tag_data"]["input_ids"][coincide_mask][
-                    batch["tag_data"]["attention_mask"][coincide_mask].bool()
-                ]
-                # logging.debug("TAGs out = " + str(out.data.argmax(-1)[:20]))
-                # logging.debug("TAGs tgt = " + str(tgt.data[:20]))
-                # logging.debug("out \t" + str(out.shape))
-                # logging.debug("tgt \t" + str(tgt.shape))
+            # out_tag = out["tag_out"][coincide_mask][out["attention_mask"]
+            #                                     [coincide_mask].bool()]
 
-                # if not coincide_mask.all():
-                #     logging.debug(tokenizer.convert_ids_to_tokens(batch["noise_data"][
-                #         "input_ids"][~coincide_mask][0][batch["noise_data"]["attention_mask"][~coincide_mask][0].bool()]))
+            tgt = batch["tag_data"]["input_ids"]
+            # logging.debug("TAGs out = " + str(out.data.argmax(-1)[:20]))
+            # logging.debug("TAGs tgt = " + str(tgt.data[:20]))
 
-                loss=criterion(out, tgt)
-                loss.backward()
-                optimizer.step()
-                del out, sizes_out, sizes_tgt, coincide_mask, tgt, batch
-            except RuntimeError as e:
+            # if not coincide_mask.all():
+            #     logging.debug(tokenizer.convert_ids_to_tokens(batch["noise_data"][
+            #         "input_ids"][~coincide_mask][0][batch["noise_data"]["attention_mask"][~coincide_mask][0].bool()]))
 
-                if "out of memory" in str(e) and device == "cuda":
-                    logging.info("OOM --- trying to recover by clearing cache")
-                    torch.cuda.empty_cache()
-                    continue
-                    out=model(**batch["noise_data"])
-                    # logging.debug("tag out " + str(out["tag_out"].shape))
-                    # logging.debug(out["attention_mask"].sum(-1))
-
-                    sizes_out=out["attention_mask"].sum(-1)
-                    sizes_tgt=batch["tag_data"]["attention_mask"].sum(-1)
-                    coincide_mask=sizes_out == sizes_tgt
-
-                    out=out["tag_out"][coincide_mask][out["attention_mask"]
-                                                        [coincide_mask].bool()]
-
-                    tgt=batch["tag_data"]["input_ids"][coincide_mask][
-                        batch["tag_data"]["attention_mask"][coincide_mask].bool()
-                    ]
-                    # logging.debug("TAGs out = " + str(out.data.argmax(-1)[:20]))
-                    # logging.debug("TAGs tgt = " + str(tgt.data[:20]))
-                    # logging.debug("out \t" + str(out.shape))
-                    # logging.debug("tgt \t" + str(tgt.shape))
-
-                    # if not coincide_mask.all():
-                    #     logging.debug(tokenizer.convert_ids_to_tokens(batch["noise_data"][
-                    #         "input_ids"][~coincide_mask][0][batch["noise_data"]["attention_mask"][~coincide_mask][0].bool()]))
-
-                    loss=criterion(out, tgt)
-                    loss.backward()
-                    optimizer.step()
-                    del out, sizes_out, sizes_tgt, coincide_mask, tgt, batch
-                else:
-                    raise e
+            loss = criterion(out, tgt, coincide_mask, batch)
+            loss.backward()
+            optimizer.step()
+            del out, sizes_out, sizes_tgt, coincide_mask, tgt, batch
 
             if num_iter == 0:
                 torch.cuda.empty_cache()
@@ -215,7 +249,20 @@ def train(args, device):
                 del loss
 
             # VALID STEP
-            if (num_iter + 1) % args.valid_iter == 0:
+            if (num_iter) % args.valid_iter == 0:
+                # Regular model save (checkpoint)
+                torch.save(
+                    {
+                        "num_iter": 0,
+                        "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                    },
+                    os.path.join(
+                        args.save,
+                        model.id,
+                        "model_{}.pt".format(num_iter),
+                    )
+                )
                 if args.valid:
                     if device == "cuda":
                         torch.cuda.empty_cache()
@@ -223,51 +270,45 @@ def train(args, device):
                     criterion.eval()
                     logging.info("VALIDATION at iter " + str(num_iter))
                     with torch.no_grad():
-                        val_losses=list()
+                        val_losses = list()
                         for valid_batch in tqdm(valid_iter.next_epoch_itr()):
                             if device == "cuda":
-                                valid_batch=fairseq_utils.move_to_cuda(
+                                valid_batch = fairseq_utils.move_to_cuda(
                                     valid_batch)
 
-                            out=model(**valid_batch["noise_data"])
+                            out = model(**valid_batch["noise_data"])
 
-                            sizes_out=out["attention_mask"].sum(-1)
-                            sizes_tgt=valid_batch["tag_data"]["attention_mask"].sum(
+                            sizes_out = out["attention_mask"].sum(-1)
+                            sizes_tgt = valid_batch["tag_data"]["attention_mask"].sum(
                                 -1)
-                            coincide_mask=sizes_out == sizes_tgt
+                            coincide_mask = sizes_out == sizes_tgt
+                            #
+                            # out = out["tag_out"]
 
-                            out=out["tag_out"][coincide_mask][out["attention_mask"]
-                                                                [coincide_mask].bool()]
+                            tgt = valid_batch["tag_data"]["input_ids"]
 
-                            tgt=valid_batch["tag_data"]["input_ids"][coincide_mask][
-                                valid_batch["tag_data"]["attention_mask"][coincide_mask].bool(
-                                )
-                            ]
-
-                            val_loss=criterion(out, tgt).item()
+                            val_loss = criterion(out, tgt, coincide_mask, valid_batch).item()
                             val_losses.append(val_loss)
                         del valid_batch
-                        val_loss=sum(val_losses) / len(val_losses)
+                        val_loss = sum(val_losses) / len(val_losses)
                         writer.add_scalar(
                             os.path.join("Loss/valid"),
-                            loss.item(),
+                            val_loss,
                             num_iter,
                         )
                         stopper(val_loss)
-                # Regular model save (checkpoint)
-                torch.save(
-                    model,
-                    os.path.join(
-                        args.save,
-                        "model_{}.pt".format(num_iter))
-                )
+
                 # Update best model save if necessary
                 if stopper and stopper.counter == 0:
                     logging.debug("NEW BEST MODEL")
                     shutil.copy2(
                         os.path.join(
-                            args.save, "model_{}.pt".format(num_iter)), os.path.join(
-                            args.save, "model_best.pt"), )
+                            args.save, model.id, "model_{}.pt".format(num_iter)
+                        ),
+                        os.path.join(
+                            args.save, model.id, "model_best.pt",
+                        ),
+                    )
             if stopper and stopper.early_stop:
                 break
             num_iter += 1
@@ -279,35 +320,39 @@ def train(args, device):
         if device == "cuda":
             torch.cuda.empty_cache()
         with torch.no_grad():
-            test_losses=list()
+            test_losses = list()
             for test_batch in test_iter.next_epoch_itr():
                 if device == "cuda":
-                    test_batch=fairseq_utils.move_to_cuda(
+                    test_batch = fairseq_utils.move_to_cuda(
                         test_batch)
-                out=model(**test_batch["noise_data"])
+                out = model(**test_batch["noise_data"])
 
-                sizes_out=out["attention_mask"].sum(-1)
-                sizes_tgt=test_batch["tag_data"]["attention_mask"].sum(-1)
-                coincide_mask=sizes_out == sizes_tgt
+                sizes_out = out["attention_mask"].sum(-1)
+                sizes_tgt = test_batch["tag_data"]["attention_mask"].sum(-1)
+                coincide_mask = sizes_out == sizes_tgt
 
-                out=out["tag_out"][coincide_mask][out["attention_mask"]
-                                                    [coincide_mask].bool()]
+                # out = out["tag_out"]
 
-                tgt=test_batch["tag_data"]["input_ids"][coincide_mask][
-                    test_batch["tag_data"]["attention_mask"][coincide_mask].bool()
-                ]
+                tgt = test_batch["tag_data"]["input_ids"]
 
-                test_loss=criterion(out, tgt).item()
+                test_loss = criterion(out, tgt, coincide_mask, test_batch).item()
                 test_losses.append(test_loss)
-            test_loss=sum(test_losses) / len(test_losses)
+            test_loss = sum(test_losses) / len(test_losses)
             logging.info("MODEL test loss: " + str(test_loss))
 
-    torch.save(model, os.path.join(args.save, "model_final.pt"))
+    torch.save(
+        {
+            "epoch": num_iter,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+        },
+        os.path.join(args.save, model.id, "model_final.pt")
+    )
     logging.info("TRAINING OVER")
 
 
 def create_logger(logfile, loglevel):
-    numeric_level=getattr(logging, loglevel.upper(), None)
+    numeric_level = getattr(logging, loglevel.upper(), None)
     if not isinstance(numeric_level, int):
         logging.error("Invalid log level={}".format(loglevel))
         sys.exit()
@@ -329,10 +374,26 @@ def create_logger(logfile, loglevel):
 
 if __name__ == "__main__":
 
-    parser=argparse.ArgumentParser()
+    parser = argparse.ArgumentParser()
 
     parser.add_argument("data_path", help="Input bin data path")
     parser.add_argument("--save", required=True, help="save directory")
+    parser.add_argument(
+        "--continue-from",
+        help="Id of the model",
+    )
+    parser.add_argument(
+        "--freeze-encoder",
+        action="store_true",
+        help="Freeze encoder parameters.",
+    )
+    parser.add_argument(
+        "--model-type",
+        choices=["normal1", "decision2", "compensation1"],
+        default="normal1",
+        help="Threshold number of consecutive validation scores not improved \
+        to consider training over.",
+    )
     # optional
     parser.add_argument("-v", action="store_true")
     parser.add_argument("--log", default="info", help="logging level")
@@ -436,8 +497,8 @@ if __name__ == "__main__":
         to consider training over.",
     )
 
-    args=parser.parse_args()
+    args = parser.parse_args()
     create_logger(None, args.log)
 
-    device="cuda" if args.gpu and torch.cuda.is_available() else "cpu"
+    device = "cuda" if args.gpu and torch.cuda.is_available() else "cpu"
     train(args, device)

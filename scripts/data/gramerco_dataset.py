@@ -109,9 +109,9 @@ class GramercoDataset(FairseqDataset):
         )
 
     def num_tokens_vec(self, indices):
-        sizes = np.maximum(self.noise_sizes, self.tag_sizes)
+        sizes = np.maximum(self.noise_sizes[indices], self.tag_sizes[indices])
         if self.return_clean and self.clean_sizes:
-            sizes = np.maximum(sizes, self.clean_sizes)
+            sizes = np.maximum(sizes, self.clean_sizes[indices])
         return sizes
 
     def size(self, index):
