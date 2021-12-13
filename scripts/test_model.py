@@ -6,7 +6,7 @@ import torch.optim as optim
 import argparse
 from tqdm import tqdm
 from data.gramerco_dataset import GramercoDataset
-from model_gec.gec_bert import GecBertModel
+from model_gec.gec_bert import GecBertModel, GecBert2DecisionsModel
 from tag_encoder import TagEncoder
 from tokenizer import WordTokenizer
 import logging
@@ -34,12 +34,22 @@ def test(args):
         args.model_id,
         "model_best.pt",
     )
-    model = model = GecBertModel(
-        len(tagger),
-        tagger=tagger,
-        tokenizer=tokenizer,
-        mid=args.model_id,
-    )
+    if args.model_type == "normal":
+        model = GecBertModel(
+            len(tagger),
+            tagger=tagger,
+            tokenizer=tokenizer,
+            mid=args.model_id,
+        )
+    elif args.model_type == "decision":
+        model = GecBert2DecisionsModel(
+            len(tagger),
+            tagger=tagger,
+            tokenizer=tokenizer,
+            mid=args.model_id,
+        )
+    else:
+        raise ValueError("Model type incorrect")
     device = "cuda:" + str(args.gpu_id) \
         if args.gpu and torch.cuda.is_available() else "cpu"
     if os.path.isfile(path_to_model):
@@ -108,16 +118,20 @@ def test(args):
                         tagger,
                         lexicon
                     )
-
-                    yy = out["tag_out"][k][out["attention_mask"][k].bool()]
-                    yy = torch.softmax(yy, -1)
-                    jj = yy.topk(3, dim=-1).indices.cpu()
-                    ii = torch.arange(
-                        jj.size(0)).unsqueeze(-1).expand(jj.shape)
-                    # logging.info(jj)
-                    # logging.info(yy[ii, jj])
-                    # logging.info(batch_tag_ref[k].split(" "))
-                    pred = jj[:, 0].bool()
+                    if args.model_type == "decision":
+                        pred = out["decision_out"][k][out["attention_mask"][k].bool()].argmax(-1).bool().cpu()
+                        logging.info(torch.softmax(out["decision_out"][k][out["attention_mask"][k].bool()], -1)[:, 1].max())
+                    else:
+                        yy = out["tag_out"][k][out["attention_mask"][k].bool()]
+                        yy = torch.softmax(yy, -1)
+                        jj = yy.topk(3, dim=-1).indices.cpu()
+                        ii = torch.arange(
+                            jj.size(0)
+                        ).unsqueeze(-1).expand(jj.shape)
+                        # logging.info(jj)
+                        # logging.info(yy[ii, jj])
+                        # logging.info(batch_tag_ref[k].split(" "))
+                        pred = jj[:, 0].bool()
                     ref = torch.tensor([tagger.tag_to_id(tag)
                                        for tag in batch_tag_ref[k].split(" ")]).bool()
                     if len(pred) != len(ref):
@@ -192,6 +206,11 @@ if __name__ == "__main__":
     # optional
     parser.add_argument('-v', action='store_true')
     parser.add_argument('--log', default="info", help='logging level')
+    parser.add_argument(
+        '--model-type',
+        default='normal',
+        help="Model architecture used.",
+    )
     parser.add_argument(
         '--sample',
         type=int,

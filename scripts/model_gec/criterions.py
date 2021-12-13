@@ -8,7 +8,7 @@ class CrossEntropyLoss(torch.nn.Module):
         super(CrossEntropyLoss, self).__init__()
         self.ce = torch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
-    def forward(self, out, tgt, mask):
+    def forward(self, out, tgt, mask, x):
         att_mask_out = out["attention_mask"][mask].bool()
         att_mask_in = x["tag_data"]["attention_mask"][mask].bool()
 
@@ -28,6 +28,14 @@ class DecisionLoss(torch.nn.Module):
         att_mask_out = out["attention_mask"][mask].bool()
         att_mask_in = x["tag_data"]["attention_mask"][mask].bool()
 
+        # logging.debug("attention mask in " + str(att_mask_in[:4].long()))
+        # logging.debug("attention mask in " + str(att_mask_in[:4].long().sum(-1)))
+        # logging.debug("attention mask out " + str(att_mask_out[:4].long()))
+        # logging.debug("attention mask out " + str(att_mask_out[:4].long().sum(-1)))
+        # logging.debug("tgt " + str(tgt[mask][:5]))
+        #
+        # logging.debug("out = " + str(out["decision_out"][mask][att_mask_out][:20]))
+        # logging.debug("tgt = " + str(tgt[mask][att_mask_in].bool().long()[:20]))
         loss_decision = self.ce(
             out["decision_out"][mask][att_mask_out],
             tgt[mask][att_mask_in].bool().long()
@@ -38,8 +46,12 @@ class DecisionLoss(torch.nn.Module):
             tgt[mask][att_mask_in][error_mask] - 1)
         if not error_mask.any():
             loss_tag = torch.zeros_like(loss_tag)
-
-        return loss_decision + loss_tag
+        else:
+            # logging.info(out["decision_out"][mask][att_mask_out].shape)
+            # logging.info(tgt[mask][att_mask_in].bool().long().shape)
+            # logging.info(tgt[mask][att_mask_in].bool().long())
+            ...
+        return loss_decision # + loss_tag
 
 
 class CompensationLoss(torch.nn.Module):

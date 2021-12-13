@@ -115,51 +115,65 @@ def train(args, device):
         path_to_app=args.path_to_app
     )
 
+    if args.continue_from:
+        model_id = args.continue_from
+    else:
+        model_id = args.model_id if args.model_id else str(int(time.time()))
+        model_id = model_id + "-" + args.model_type
+
+    if args.model_type in ["decision2"]:
+        model = GecBert2DecisionsModel(
+            len(tagger),
+            tagger=tagger,
+            tokenizer=tokenizer,
+            mid=model_id,
+            freeze_encoder=args.freeze_encoder,
+        ).to(device)
+    else:
+        model = GecBertModel(
+            len(tagger),
+            tagger=tagger,
+            tokenizer=tokenizer,
+            mid=model_id,
+            freeze_encoder=args.freeze_encoder,
+        ).to(device)
+        try:
+            os.mkdir(os.path.join(args.save, model.id))
+            if args.tensorboard:
+                os.mkdir(os.path.join(args.save, "tensorboard", model.id))
+        except BaseException:
+            ...
+
     if args.continue_from and os.path.isfile(
         os.path.join(
             args.save,
             args.continue_from,
-            "model_best.pt")):
+            "model_best.pt"
+        )
+    ):
         logging.info(
             "continue from " +
             os.path.join(
                 args.save,
                 args.continue_from,
                 "model_best.pt"))
-        model = torch.load(
+        model_info = torch.load(
             os.path.join(
                 args.save,
                 args.continue_from,
-                "model_best.pt"))
-    else:
-        if args.model_type in ["decision2"]:
-            model = GecBert2DecisionsModel(
-                len(tagger),
-                tagger=tagger,
-                tokenizer=tokenizer,
-                mid=str(int(time.time())),
-                freeze_encoder=args.freeze_encoder,
-            ).to(device)
-        else:
-            model = GecBertModel(
-                len(tagger),
-                tagger=tagger,
-                tokenizer=tokenizer,
-                mid=str(int(time.time())),
-                freeze_encoder=args.freeze_encoder,
-            ).to(device)
-        os.mkdir(os.path.join(args.save, model.id))
-        if args.tensorboard:
-            os.mkdir(os.path.join(args.save, "tensorboard", model.id))
+                "model_best.pt"
+            )
+        )
+        model.load_dict(model_info["model_state_dict"])
 
     train_iter, valid_iter, test_iter = load_data(args, tagger, tokenizer)
     # criterion = LabelSmoothingLoss(smoothing=0.02)
     if args.model_type == "normal1":
-        criterion = CrossEntropyLoss(label_smoothing=0.02)
+        criterion = CrossEntropyLoss(label_smoothing=args.label_smoothing)
     elif args.model_type == "decision2":
-        criterion = DecisionLoss(label_smoothing=0.02)
+        criterion = DecisionLoss(label_smoothing=args.label_smoothing)
     elif args.model_type == "compensation1":
-        criterion = CompensationLoss(label_smoothing=0.02)
+        criterion = CompensationLoss(label_smoothing=args.label_smoothing)
     else:
         raise ValueError("No corresponding loss found!")
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
@@ -233,6 +247,7 @@ def train(args, device):
             #         "input_ids"][~coincide_mask][0][batch["noise_data"]["attention_mask"][~coincide_mask][0].bool()]))
 
             loss = criterion(out, tgt, coincide_mask, batch)
+            # sys.exit(8)
             loss.backward()
             optimizer.step()
             del out, sizes_out, sizes_tgt, coincide_mask, tgt, batch
@@ -287,7 +302,8 @@ def train(args, device):
 
                             tgt = valid_batch["tag_data"]["input_ids"]
 
-                            val_loss = criterion(out, tgt, coincide_mask, valid_batch).item()
+                            val_loss = criterion(
+                                out, tgt, coincide_mask, valid_batch).item()
                             val_losses.append(val_loss)
                         del valid_batch
                         val_loss = sum(val_losses) / len(val_losses)
@@ -335,7 +351,8 @@ def train(args, device):
 
                 tgt = test_batch["tag_data"]["input_ids"]
 
-                test_loss = criterion(out, tgt, coincide_mask, test_batch).item()
+                test_loss = criterion(
+                    out, tgt, coincide_mask, test_batch).item()
                 test_losses.append(test_loss)
             test_loss = sum(test_losses) / len(test_losses)
             logging.info("MODEL test loss: " + str(test_loss))
@@ -386,6 +403,10 @@ if __name__ == "__main__":
         "--freeze-encoder",
         action="store_true",
         help="Freeze encoder parameters.",
+    )
+    parser.add_argument(
+        "--model-id",
+        help="Model id (default = current timestamp in seconds).",
     )
     parser.add_argument(
         "--model-type",
@@ -461,13 +482,22 @@ if __name__ == "__main__":
         "--n-epochs",
         type=int,
         default=2,
-        help="Number of epochs")
+        help="Number of epochs"
+    )
     parser.add_argument(
         "-lr",
         "--learning-rate",
         type=float,
         default=0.001,
-        help="Learning rate value.")
+        help="Learning rate value."
+    )
+    parser.add_argument(
+        "-ls",
+        "--label-smoothing",
+        type=float,
+        default=0.1,
+        help="Label smoothing."
+    )
     parser.add_argument(
         "--valid",
         action="store_true",

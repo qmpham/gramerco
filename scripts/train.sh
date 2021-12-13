@@ -10,11 +10,12 @@ SAVE_PATH=$DATA_DIR/models/gramerco-fr
 mkdir -p $SAVE_PATH
 mkdir -p $SAVE_PATH/tensorboard
 
-CUDA_VISIBLE_DEVICES=0 \
+CUDA_VISIBLE_DEVICES=1 \
 CUDA_LAUNCH_BLOCKING=1 \
 PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:200 \
 python train.py $DATA_BIN/$DATA_NAME \
       --log DEBUG \
+      --model-id freeze-2 \
       --model-type decision2 \
       --save $SAVE_PATH \
       --continue-from none \
@@ -30,9 +31,11 @@ python train.py $DATA_BIN/$DATA_NAME \
       --max-positions 510 \
       --n-epochs 1 \
       -lr 0.00001 \
+      -ls 0.1 \
       --valid-iter 5000  \
       --early-stopping 5 \
       --gpu \
       --ignore-clean \
       --valid \
       --test \
+      # --freeze-encoder \
