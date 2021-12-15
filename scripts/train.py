@@ -115,7 +115,7 @@ def train(args, device):
         path_to_app=args.path_to_app
     )
 
-    if args.continue_from:
+    if args.continue_from and args.continue_from != "none":
         model_id = args.continue_from
     else:
         model_id = args.model_id if args.model_id else str(int(time.time()))
@@ -127,7 +127,8 @@ def train(args, device):
             tagger=tagger,
             tokenizer=tokenizer,
             mid=model_id,
-            freeze_encoder=args.freeze_encoder,
+            freeze_encoder=(args.freeze_encoder != 0),
+            dropout=args.dropout,
         ).to(device)
     else:
         model = GecBertModel(
@@ -135,16 +136,17 @@ def train(args, device):
             tagger=tagger,
             tokenizer=tokenizer,
             mid=model_id,
-            freeze_encoder=args.freeze_encoder,
+            freeze_encoder=(args.freeze_encoder != 0),
+            dropout=args.dropout,
         ).to(device)
-        try:
-            os.mkdir(os.path.join(args.save, model.id))
-            if args.tensorboard:
-                os.mkdir(os.path.join(args.save, "tensorboard", model.id))
-        except BaseException:
-            ...
+    try:
+        os.mkdir(os.path.join(args.save, model.id))
+        if args.tensorboard:
+            os.mkdir(os.path.join(args.save, "tensorboard", model.id))
+    except BaseException:
+        ...
 
-    if args.continue_from and os.path.isfile(
+    if args.continue_from and args.continue_from != "none" and os.path.isfile(
         os.path.join(
             args.save,
             args.continue_from,
@@ -176,7 +178,8 @@ def train(args, device):
         criterion = CompensationLoss(label_smoothing=args.label_smoothing)
     else:
         raise ValueError("No corresponding loss found!")
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+    lr = args.learning_rate / float(args.grad_cumul_iter)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
 
     if args.tensorboard:
         writer = SummaryWriter(log_dir=os.path.join(
@@ -199,7 +202,7 @@ def train(args, device):
             "model_best.pt"
         )
     )
-
+    optimizer.zero_grad()
     num_iter = 0
     for epoch in range(args.n_epochs):
         logging.debug("EPOCH " + str(epoch))
@@ -207,16 +210,16 @@ def train(args, device):
         if device == "cuda":
             torch.cuda.empty_cache()
         for batch in tqdm(train_bs):
+            if num_iter > args.freeze_encoder:
+                model.freeze_encoder = False
             if device == "cuda":
                 batch = fairseq_utils.move_to_cuda(batch)
-                # logging.debug(torch.cuda.memory_allocated(device))
-                if num_iter + 1 % 10 == 0:
-                    torch.cuda.empty_cache()
             # logging.debug("-" * 72)
             model.train()
             criterion.train()
-            #  TRAIN STEP
             optimizer.zero_grad()
+
+            #  TRAIN STEP
 
             # logging.debug("noise data " +
             #               str(batch["noise_data"]["input_ids"].shape)
@@ -246,10 +249,14 @@ def train(args, device):
             #     logging.debug(tokenizer.convert_ids_to_tokens(batch["noise_data"][
             #         "input_ids"][~coincide_mask][0][batch["noise_data"]["attention_mask"][~coincide_mask][0].bool()]))
 
-            loss = criterion(out, tgt, coincide_mask, batch)
+            loss = criterion(out, tgt, coincide_mask, batch,
+                             mask_keep_prob=args.random_keep_mask)
             # sys.exit(8)
             loss.backward()
             optimizer.step()
+            if False and num_iter % args.grad_cumul_iter == 0:
+                optimizer.step()
+                optimizer.zero_grad()
             del out, sizes_out, sizes_tgt, coincide_mask, tgt, batch
 
             if num_iter == 0:
@@ -401,7 +408,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--freeze-encoder",
-        action="store_true",
+        type=int,
+        default=0,
         help="Freeze encoder parameters.",
     )
     parser.add_argument(
@@ -497,6 +505,24 @@ if __name__ == "__main__":
         type=float,
         default=0.1,
         help="Label smoothing."
+    )
+    parser.add_argument(
+        "--dropout",
+        type=float,
+        default=0.,
+        help="Dropout probability in the linear layers"
+    )
+    parser.add_argument(
+        "--grad-cumul-iter",
+        type=int,
+        default=1,
+        help="Cumulatate grad, then take optimization step every --grad-cumul-iter interations"
+    )
+    parser.add_argument(
+        "--random-keep-mask",
+        type=float,
+        default=0.,
+        help="Probability of masking a keep tag in the loss computation. Used to favor error detection."
     )
     parser.add_argument(
         "--valid",

@@ -26,6 +26,7 @@ class GecBertModel(nn.Module):
         tagger=None,
         mid=None,
         freeze_encoder=False,
+        dropout=0.,
     ):
         super(GecBertModel, self).__init__()
 
@@ -36,6 +37,10 @@ class GecBertModel(nn.Module):
         self.num_tag = num_tag
         h_size = self.encoder.attentions[0].out_lin.out_features
         self.linear_layer = nn.Linear(h_size, num_tag)
+        if dropout > 0.0:
+            self.dropout_layer = nn.Dropout(p=dropout)
+        else:
+            self.dropout_layer = None
         self.id = mid
         self.freeze_encoder = freeze_encoder
 
@@ -80,6 +85,8 @@ class GecBertModel(nn.Module):
             attention_mask_larger).to(h.last_hidden_state.device)
         attention_mask[:, 1:-1] = attention_mask_larger[:, 2:]
         out = self.linear_layer(h_w)
+        if self.dropout_layer:
+            out = self.dropout_layer(out)
         # out = torch.softmax(out, -1)
         # out = self.ls(out)
         return {"tag_out": out, "attention_mask": attention_mask}
@@ -95,19 +102,11 @@ class GecBert2DecisionsModel(GecBertModel):
     def __init__(
         self,
         num_tag,
-        encoder_name="flaubert/flaubert_base_cased",
-        tokenizer=None,
-        tagger=None,
-        mid=None,
-        freeze_encoder=False,
+        **kwargs
     ):
         super(GecBert2DecisionsModel, self).__init__(
             num_tag,
-            encoder_name=encoder_name,
-            tokenizer=tokenizer,
-            tagger=tagger,
-            mid=mid,
-            freeze_encoder=freeze_encoder
+            **kwargs
         )
 
         h_size = self.encoder.attentions[0].out_lin.out_features
@@ -134,6 +133,9 @@ class GecBert2DecisionsModel(GecBertModel):
         attention_mask[:, 1:-1] = attention_mask_larger[:, 2:]
         out = self.linear_layer(h_w)
         out_decision = self.decision_layer(h_w)
+        if self.dropout_layer:
+            out = self.dropout_layer(out)
+            out_decision = self.dropout_layer(out_decision)
         # out = torch.softmax(out, -1)
         # out = self.ls(out)
         return {

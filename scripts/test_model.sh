@@ -20,7 +20,7 @@ python test_model.py \
       --log DEBUG \
       --save $SAVE_PATH \
       --model-type decision \
-      --model-id freeze-2-decision2 \
+      --model-id dropout0.1+ls0.2-decision2 \
       --lex $DATA_DIR/Lexique383.tsv \
       --app $DATA_DIR/$DATA_NAME/$DATA_NAME-lex/lexique.app \
       --tokenizer flaubert/flaubert_base_cased \
