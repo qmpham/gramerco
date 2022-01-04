@@ -15,7 +15,10 @@ class CrossEntropyLoss(torch.nn.Module):
         y = out["tag_out"][mask][att_mask_out]
         t = tgt[mask][att_mask_in]
 
-        mask_final = t.ne(0) | (torch.rand(t.shape, device=t.device) > mask_keep_prob)
+        mask_final = t.ne(0) | (
+            torch.rand(
+                t.shape,
+                device=t.device) > mask_keep_prob)
 
         loss_tag = self.ce(y[mask_final], t[mask_final])
 
@@ -24,9 +27,11 @@ class CrossEntropyLoss(torch.nn.Module):
 
 class DecisionLoss(torch.nn.Module):
 
-    def __init__(self, label_smoothing=0.0):
+    def __init__(self, label_smoothing=0.0, beta=0.1):
         super(DecisionLoss, self).__init__()
         self.ce = torch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+        self.beta = beta
+        logging.info("decision loss weight = " + str(self.beta))
 
     def forward(self, out, tgt, mask, x, mask_keep_prob=0):
         assert "decision_out" in out
@@ -43,7 +48,10 @@ class DecisionLoss(torch.nn.Module):
         # logging.debug("tgt = " + str(tgt[mask][att_mask_in].bool().long()[:20]))
         y = out["decision_out"][mask][att_mask_out]
         t = tgt[mask][att_mask_in].bool().long()
-        mask_final = t.ne(0) | (torch.rand(t.shape, device=t.device) > mask_keep_prob)
+        mask_final = t.ne(0) | (
+            torch.rand(
+                t.shape,
+                device=t.device) > mask_keep_prob)
         loss_decision = self.ce(
             y[mask_final],
             t[mask_final],
@@ -63,7 +71,7 @@ class DecisionLoss(torch.nn.Module):
             # logging.info(tgt[mask][att_mask_in].bool().long().shape)
             # logging.info(tgt[mask][att_mask_in].bool().long())
             ...
-        return loss_decision # + loss_tag
+        return loss_decision + self.beta * loss_tag
 
 
 class CompensationLoss(torch.nn.Module):
@@ -82,7 +90,10 @@ class CompensationLoss(torch.nn.Module):
         y1 = torch.logsumexp(y[:, 1:], -1) - torch.logsumexp(y, -1)
         decision = torch.stack((y0, y1), -1)
         loss_decision = self.ce(decision, tgt[mask][att_mask_in].bool().long())
-        mask_final = t.ne(0) | (torch.rand(t.shape, device=t.device) > mask_keep_prob)
+        mask_final = t.ne(0) | (
+            torch.rand(
+                t.shape,
+                device=t.device) > mask_keep_prob)
         loss_tag = self.ce(y[mask_final], t[mask_final])
 
         return loss_decision + loss_tag

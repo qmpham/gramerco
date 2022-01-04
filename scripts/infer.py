@@ -49,8 +49,8 @@ def apply_tags(
     # logging.info(len(tags))
 
     if len(toks) != len(tags):
-        logging.info(len(toks))
-        logging.info(len(tags))
+        logging.debug(len(toks))
+        logging.debug(len(tags))
         toks, tags = toks[:len(tags)], tags[:len(toks)]
 
     assert len(toks) == len(tags)

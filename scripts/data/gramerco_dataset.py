@@ -130,17 +130,22 @@ class GramercoDataset(FairseqDataset):
             self.tag_sizes[indices], kind="mergesort")]
         return indices[np.argsort(self.noise_sizes[indices], kind="mergesort")]
 
-    def filter_indices_by_size(self, indices, max_sizes):
+    def filter_indices_by_size(self, indices, max_sizes, min_sizes):
         if self.clean_sizes:
             mask_ignored = (
-                (self.noise_sizes[indices] > max_sizes)
+                  (self.noise_sizes[indices] > max_sizes)
                 | (self.tag_sizes[indices] > max_sizes)
                 | (self.clean_sizes[indices] > max_sizes)
+                | (self.noise_sizes[indices] < min_sizes)
+                | (self.tag_sizes[indices] < min_sizes)
+                | (self.clean_sizes[indices] < min_sizes)
             )
         else:
             mask_ignored = (
-                (self.noise_sizes[indices] > max_sizes)
+                  (self.noise_sizes[indices] > max_sizes)
                 | (self.tag_sizes[indices] > max_sizes)
+                | (self.noise_sizes[indices] < min_sizes)
+                | (self.tag_sizes[indices] < min_sizes)
             )
         ignored = indices[mask_ignored]
         indices = indices[~mask_ignored]
@@ -233,11 +238,12 @@ if __name__ == "__main__":
     max_tokens = 1000
     max_sentences = 50
     max_positions = 512
+    min_positions = 5
 
     with data_utils.numpy_seed(seed):
         indices = dataset.ordered_indices()
 
-    indices, _ = dataset.filter_indices_by_size(indices, max_positions)
+    indices, _ = dataset.filter_indices_by_size(indices, max_positions, min_positions)
 
     batch_sampler = dataset.batch_by_size(
         indices,

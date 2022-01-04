@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader
 import logging
 import sys
 import os
+import itertools
 
 pwd = os.path.dirname(__file__)
 sys.path.append(os.path.dirname(pwd))
@@ -112,6 +113,10 @@ class GecBert2DecisionsModel(GecBertModel):
         h_size = self.encoder.attentions[0].out_lin.out_features
         self.linear_layer = nn.Linear(h_size, num_tag - 1)
         self.decision_layer = nn.Linear(h_size, 2)
+        if "dropout" in kwargs and kwargs["dropout"] > 0.0:
+            self.dropout_dec_layer = nn.Dropout(p=kwargs["dropout"])
+        else:
+            self.dropout_dec_layer = None
 
     def forward(self, **inputs):
         if self.freeze_encoder:
@@ -135,13 +140,18 @@ class GecBert2DecisionsModel(GecBertModel):
         out_decision = self.decision_layer(h_w)
         if self.dropout_layer:
             out = self.dropout_layer(out)
-            out_decision = self.dropout_layer(out_decision)
+            out_decision = self.dropout_dec_layer(out_decision)
         # out = torch.softmax(out, -1)
         # out = self.ls(out)
         return {
             "tag_out": out,
             "decision_out": out_decision,
             "attention_mask": attention_mask}
+
+    def parameters(self):
+        if self.freeze_encoder:
+            return iter(itertools.chain(self.linear_layer.parameters(), self.decision_layer.parameters()))
+        return super().parameters()
 
 
 def create_logger(logfile, loglevel):

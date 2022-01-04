@@ -4,6 +4,7 @@ from noiser.Noise import Spacy
 from transformers import FlaubertTokenizer
 import os
 import sys
+import logging
 pwd = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(pwd))
 sys.path.append(os.path.dirname(os.path.abspath(pwd)))
@@ -14,6 +15,31 @@ except BaseException:
 
 separ = '￨'
 
+error_type_id = {
+    "DELETE": 0,
+    "COPY": 1,
+    "SWAP": 2,
+    "MERGE": 3,
+    "CASE": 4,
+    "SPLIT": 5,
+    "HYPHEN": 6,
+    "APPEND": 7,
+    "TRANSFORM": 8,
+    "REPLACE": 9,
+}
+
+id_error_type = [
+    "DELETE",
+    "COPY",
+    "SWAP",
+    "MERGE",
+    "CASE",
+    "SPLIT",
+    "HYPHEN",
+    "APPEND",
+    "TRANSFORM",
+    "REPLACE",
+]
 
 def default_keep_tok():
     return '·'
@@ -93,6 +119,19 @@ class TagEncoder:
         self._id_to_tag[self._curr_cpt] = tag
         self._tag_to_id[tag] = self._curr_cpt
         self._curr_cpt += 1
+
+    def get_tag_category(self, tag):
+        if type(tag) == int:
+            # logging.debug(str(tag))
+            tag = self.id_to_tag(tag)
+        error_type = tag[1:].split('_')[0]
+        if error_type in ["ART", "PRO", "PRE", "ADV"]:
+            error_type = "REPLACE"
+        # logging.debug(error_type + "   :   " + tag)
+        # DELETE, COPY, SWAP, SPLIT, HYPHEN, CASE, TRANSFORM, APPEND, REPLACE
+        if error_type in error_type_id:
+            return error_type_id[error_type]
+        return error_type_id["KEEP"]
 
     def size(self):
         return self._curr_cpt

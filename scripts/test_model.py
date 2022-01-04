@@ -1,13 +1,16 @@
 from transformers import FlaubertTokenizer, FlaubertModel
 import torch
+import numpy as np
 import torch.nn as nn
+from sklearn.metrics import ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 import torch.optim as optim
 import argparse
 from tqdm import tqdm
 from data.gramerco_dataset import GramercoDataset
 from model_gec.gec_bert import GecBertModel, GecBert2DecisionsModel
-from tag_encoder import TagEncoder
+from tag_encoder import TagEncoder, error_type_id, id_error_type
 from tokenizer import WordTokenizer
 import logging
 import matplotlib.pyplot as plt
@@ -16,6 +19,7 @@ import os
 import sys
 import re
 from infer import apply_tags
+from tqdm import tqdm
 
 
 def test(args):
@@ -29,11 +33,24 @@ def test(args):
         path_to_app=args.app,
     )
 
-    path_to_model = os.path.join(
-        args.save_path,
-        args.model_id,
-        "model_best.pt",
-    )
+    if os.path.isfile(
+        os.path.join(
+            args.save_path,
+            args.model_id,
+            "model_{}.pt".format(args.model_iter),
+        )
+    ):
+        path_to_model = os.path.join(
+            args.save_path,
+            args.model_id,
+            "model_{}.pt".format(args.model_iter),
+        )
+    else:
+        path_to_model = os.path.join(
+            args.save_path,
+            args.model_id,
+            "model_best.pt",
+        )
     if args.model_type == "normal":
         model = GecBertModel(
             len(tagger),
@@ -53,6 +70,7 @@ def test(args):
     device = "cuda:" + str(args.gpu_id) \
         if args.gpu and torch.cuda.is_available() else "cpu"
     if os.path.isfile(path_to_model):
+        logging.info("loading model from " + path_to_model)
         map_loc = torch.device(device)
         state_dict = torch.load(path_to_model, map_location=map_loc)
         if isinstance(state_dict, GecBertModel):
@@ -70,6 +88,7 @@ def test(args):
 
     logging.info(torch.cuda.device_count())
     logging.info("device = " + device)
+    logging.info(torch.version.cuda)
     model.to(device)
 
     with open(args.file_src, 'r') as f:
@@ -83,15 +102,17 @@ def test(args):
 
     logging.info("contains {} sentences".format(len(txt_src)))
 
-    non_zeros = [6, 11, 13, 26, 27, 40, 46]
     FP = 0
     TP = 0
     FN = 0
     TN = 0
     num_tags = 0
     num_keeps = 0
-
-    for i in range(len(txt_src) // args.batch_size + 1):
+    accs = np.zeros(len(id_error_type))
+    lens = np.zeros(len(id_error_type))
+    pred_tags = list()
+    ref_tags = list()
+    for i in tqdm(range(len(txt_src) // args.batch_size + 1)):
         # if i > 0:
         #     print()
         batch_txt = txt_src[args.batch_size * i:
@@ -107,6 +128,7 @@ def test(args):
                 max_length=510
             ).to(device)
             # logging.info(toks["input_ids"].shape)
+            dec = list()
             with torch.no_grad():
                 out = model(**toks)  # tag_out, attention_mask
                 for k, t in enumerate(batch_txt):
@@ -119,8 +141,12 @@ def test(args):
                         lexicon
                     )
                     if args.model_type == "decision":
-                        pred = out["decision_out"][k][out["attention_mask"][k].bool()].argmax(-1).bool().cpu()
-                        logging.info(torch.softmax(out["decision_out"][k][out["attention_mask"][k].bool()], -1)[:, 1].max())
+                        pred = out["decision_out"][k][out["attention_mask"][
+                            k].bool()].argmax(-1).cpu().bool()
+                        dec.append(torch.softmax(
+                            out["decision_out"][k][out["attention_mask"][k].bool()], -1)[:, 1].max().item())
+                        pred_tag = out["tag_out"][k][out["attention_mask"][
+                            k].bool()].argmax(-1)
                     else:
                         yy = out["tag_out"][k][out["attention_mask"][k].bool()]
                         yy = torch.softmax(yy, -1)
@@ -132,50 +158,103 @@ def test(args):
                         # logging.info(yy[ii, jj])
                         # logging.info(batch_tag_ref[k].split(" "))
                         pred = jj[:, 0].bool()
-                    ref = torch.tensor([tagger.tag_to_id(tag)
-                                       for tag in batch_tag_ref[k].split(" ")]).bool()
+                        pred_tag = jj[:, 0]
+
+                    ref_tag = torch.tensor([tagger.tag_to_id(tag)
+                                            for tag in batch_tag_ref[k].split(" ")])
+
+                    ref = ref_tag.clone().bool()
                     if len(pred) != len(ref):
                         continue
+                    if len(pred_tag) != len(ref_tag):
+                        continue
+                    ref_tags.append(ref_tag)
+                    pred_tags.append(pred_tag)
                     TP += ((pred == ref) & ref).long().sum().item()
                     TN += ((pred == ref) & ~ref).long().sum().item()
                     FN += ((pred != ref) & ref).long().sum().item()
                     FP += ((pred != ref) & ~ref).long().sum().item()
                     num_tags += ref.long().sum().item()
                     num_keeps += (~ref).long().sum().item()
+                    pred_types = (pred_tag[ref].clone().to("cpu") + 1).apply_(
+                        tagger.get_tag_category).long()
+                    ref_types = (ref_tag[ref].clone().to("cpu")).apply_(
+                        tagger.get_tag_category).long()
+                    for err_id in range(len(id_error_type)):
+                        pred_types_i = pred_types[ref_types == err_id]
+                        accs[err_id] += (pred_types_i == err_id).long(
+                        ).sum().item()
+                        lens[err_id] += len(pred_types_i)
+    # pts = np.array([len(pt) for pt in pred_tags])
+    # rts = np.array([len(pt) for pt in ref_tags])
+    # print(pts[pts != rts])
+    # print(rts[pts != rts])
+    pred_tags = torch.cat(pred_tags).cpu()
+    ref_tags = torch.cat(ref_tags).cpu()
+    pred_error_types = (pred_tags[ref_tags.ne(0)] +
+                        1).apply_(tagger.get_tag_category).long()
+    ref_error_types = (ref_tags[ref_tags.ne(0)]).apply_(
+        tagger.get_tag_category).long()
+    ConfusionMatrixDisplay.from_predictions(
+        ref_error_types,
+        pred_error_types,
+        normalize="true",
+        cmap="coolwarm",
+        display_labels=id_error_type,
+    )
+    plt.savefig(os.path.join(
+        args.save_path,
+        args.model_id,
+        "confusion_matrix.png",
+    ))
 
-                    if False and i * args.batch_size + k in non_zeros:
-                        logging.info("*" * 50)
-                        logging.info("Noise sentence >>> " + str(t))
-                        # logging.info(
-                        #     " ".join(
-                        #         tagger.id_to_tag(tag.item())
-                        #         for tag in out["tag_out"][k].argmax(-1)[out["attention_mask"][k].bool()].cpu()
-                        #     )
-                        # )
-                        for topk in range(1):
-                            logging.info(
-                                "infered tags >>> " +
-                                " ".join(
-                                    tagger.id_to_tag(tid.item())
-                                    for tid in jj[:, topk]
-                                )
-                            )
-                        logging.info("Corrected sentence >>> " + batch_txt[k])
-                        logging.info(
-                            "ref tags >>> " +
-                            batch_tag_ref[k]
-                        )
-                        # logging.info("-" * 50)
+    # plt.figure()
+    # ConfusionMatrixDisplay.from_predictions(
+    #     ref_tags,
+    #     pred_tags,
+    #     normalize="true",
+    #     cmap="coolwarm",
+    # )
+    # plt.savefig(os.path.join(
+    #     args.save_path,
+    #     args.model_id,
+    #     "confusion_matrix_full.png",
+    # ))
+
+    dec = np.array(dec)
+    logging.info("########## decision")
+    logging.info("dec mean = " + str(dec.mean()))
+    logging.info("dec med = " + str(np.median(dec)))
+    logging.info("dec Q1 = " + str(np.quantile(dec, 0.25)))
+    logging.info("dec std = " + str(np.std(dec)))
+    logging.info("dec Q3 = " + str(np.quantile(dec, 0.75)))
+    logging.info("dec max = " + str(np.max(dec)))
+    logging.info("dec min = " + str(np.min(dec)))
     logging.info("TP = " + str(TP))
     logging.info("TN = " + str(TN))
     logging.info("FN = " + str(FN))
     logging.info("FP = " + str(FP))
     logging.info("non identified errors = " + str(FN / (FN + TP) * 100))
     logging.info("non identified keep = " + str(FP / (FP + TN) * 100))
-    logging.info("#keep = " + str(num_keeps))
-    logging.info("#tag = " + str(num_tags))
+    logging.info("########## TAG")
+    for err_id in range(len(id_error_type)):
+        logging.info("acc " +
+                     str(id_error_type[err_id]) +
+                     " = " +
+                     str(accs[err_id] /
+                         lens[err_id]))
+    logging.info("########## GLOBAL")
+    logging.info("# keep = " + str(num_keeps))
+    logging.info("# tag = " + str(num_tags))
     logging.info("prop tag = " + str(num_tags / (num_tags + num_keeps) * 100))
+    for err_id in range(len(id_error_type)):
+        logging.info("# err " +
+                     str(id_error_type[err_id]) +
+                     " = " +
+                     str(int(lens[err_id])))
     # print('\n'.join(batch_txt))
+    pli = np.stack((pred_tags[ref_tags.ne(0)] + 1, ref_tags[ref_tags.ne(0)]), -1)
+    np.savetxt("pli.csv", pli, delimiter=",", fmt="%d")
 
 
 def create_logger(logfile, loglevel):
@@ -210,6 +289,13 @@ if __name__ == "__main__":
         '--model-type',
         default='normal',
         help="Model architecture used.",
+    )
+    parser.add_argument(
+        '--model-iter',
+        type=int,
+        default=-1,
+        help="model iteration id: loading replaces best_model.pt by model_<iter>.pt ;"
+        "negative or invalid will load best_model.pt",
     )
     parser.add_argument(
         '--sample',
