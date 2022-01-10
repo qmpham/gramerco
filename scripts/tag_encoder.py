@@ -154,28 +154,11 @@ class TagEncoder2(TagEncoder):
 
         rep = read_rep(path_to_lex)
         app = read_app(path_to_app)
-        worder = WordEncoder(path_to_app)
+        self.worder = WordEncoder(path_to_app)
 
         self._id_to_tag = defaultdict(default_keep_tok)
         self._tag_to_id = defaultdict(default_keep_id)
         self._curr_cpt = 1
-
-        self.error_type_id = {
-            "DELETE": 0,
-            "COPY": 1,
-            "SWAP": 2,
-            "SPLIT": 3,
-            "MERGE": 4,
-            "SPLIT": 5,
-            "SPLIT_HYPHEN": 6,
-            "MERGE_HYPHEN": 7,
-            "CASE": 8,
-            "CASE_UPPER": 9,
-            "CASE_LOWER": 10,
-            "TRANSFORM": 11,
-            "APPEND": 12,
-            "REPLACE": 13,
-        }
 
         self.id_error_type = [
             "DELETE",
@@ -183,7 +166,6 @@ class TagEncoder2(TagEncoder):
             "SWAP",
             "SPLIT",
             "MERGE",
-            "SPLIT",
             "SPLIT_HYPHEN",
             "MERGE_HYPHEN",
             "CASE",
@@ -192,12 +174,17 @@ class TagEncoder2(TagEncoder):
             "TRANSFORM",
             "APPEND",
             "REPLACE",
+            "SPLIT",
         ]
+
+        self.error_type_id = {
+            key: i for i, key in enumerate(self.id_error_type)
+        }
 
         self.add_tag("$DELETE")
         self.add_tag("$COPY")
         self.add_tag("$SWAP")
-        self.add_tag("$SPLIT")
+        # self.add_tag("$SPLIT")
         self.add_tag("$MERGE")
         self.add_tag("$SPLIT_HYPHEN")
         self.add_tag("$MERGE_HYPHEN")
@@ -231,12 +218,41 @@ class TagEncoder2(TagEncoder):
                     self.add_tag(
                         "$TRANSFORM_" + separ.join([pos, "-", "-", "sub", "pre", pers + nombre]))
 
-        for app_tok in app:
-            self.add_tag("$APPEND_" + app_tok)
+        self.add_tag("$APPEND")
+        self.add_tag("$REPLACE")
+        self.add_tag("$SPLIT")
+        # for app_tok in app:
+        #     self.add_tag("$APPEND_" + app_tok)
+        #
+        # for pos in rep["pos2mot"]:  # ART + PRO + PRE + ADV
+        #     for tok in rep["pos2mot"][pos]:
+        #         self.add_tag("$REPLACE_" + tok)
 
-        for pos in rep["pos2mot"]:  # ART + PRO + PRE + ADV
-            for tok in rep["pos2mot"][pos]:
-                self.add_tag("$REPLACE_" + tok)
+    def id_to_tag(self, i):
+        if i < self.size - 3:
+            self._id_to_tag[i]
+        j = i - self._curr_cpt + 3
+        tag = j // len(self.worder)
+        word = j % len(self.worder)
+
+        return (
+            "$" +
+            self.id_error_type[self._curr_cpt - tag - 1] +
+            "_" +
+            self.worder.id_to_word[word]
+        )
+
+    def tag_to_id(self, tag):
+        if self.is_word_tag(tag):
+            tags = tag.split('_')
+            word = tags[-1]
+            word = self.worder.word_to_id[word]
+            tag = '_'.join(tags[:-1])[1:]
+            cls = self.error_type_id[tag]
+            cls = self._curr_cpt - cls - 1
+            return self._curr_cpt - 3 + len(worder) * cls + word
+
+        return self._tag_to_id[tag[1:]]
 
     def is_word_tag(tag):
         return (tag.startswith("$APPEND")
@@ -266,11 +282,13 @@ class WordEncoder:
     voc = read_app(path_to_voc)
     self.id_to_word = defaultdict(default_keep_id)
     self.word_to_id = default_dict(default_empty)
+    self._curr_cpt = 0
     for word in voc:
+        self.add_word(word)
 
-    def add_tag(self, tag):
-        self._id_to_tag[self._curr_cpt] = tag
-        self._tag_to_id[tag] = self._curr_cpt
+    def add_word(self, word):
+        self._id_to_word[self._curr_cpt] = word
+        self._word_to_id[word] = self._curr_cpt
         self._curr_cpt += 1
 
     def get_tag_category(self, tag):
