@@ -64,11 +64,11 @@ class Dictionary:
 
         def token_string(i):
             if i == self.unk_index():
-                return self.unk_index_string(escape_unk)
+                return self.unk_index_string('<unk>')
             else:
                 return self[i]
 
-        sent = separator.join(token_string(i) for i in tensor)
+        sent = ' '.join(token_string(i) for i in tensor)
 
         return sent
 

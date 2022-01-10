@@ -6,7 +6,7 @@ import torch.optim as optim
 import argparse
 from tqdm import tqdm
 from data.gramerco_dataset import GramercoDataset
-from model_gec.gec_bert import GecBertModel
+from model_gec.gec_bert import GecBert2DecisionsModel
 from tag_encoder import TagEncoder
 from tokenizer import WordTokenizer
 import logging
@@ -36,10 +36,12 @@ def g_transform(tok, tag, lexicon):
 
 def apply_tags(
         sentence: str,
+        decisions: torch.BoolTensor,
         tags: torch.LongTensor,
         tokenizer: WordTokenizer,
         tagger: TagEncoder,
-        lexicon: Lexicon):
+        lexicon: Lexicon,
+):
 
     toks = tokenizer.tokenize(sentence, max_length=510)
     # logging.info("-----------------------")
@@ -55,9 +57,15 @@ def apply_tags(
 
     assert len(toks) == len(tags)
 
+    logging.info("dec -----> " + str(decisions))
+
     new_toks = list()
     i = 0
     while i < len(toks):
+        if not decisions[i].item():
+            new_toks.append(toks[i])
+            i += 1
+            continue
         tag = tagger.id_to_tag(tags[i].item())
         if tag == '·':  # keep
             new_toks.append(toks[i])
@@ -127,15 +135,17 @@ def infer(args):
         args.model_id,
         "model_best.pt"
     )
-    model = model = GecBertModel(
+    model = model = GecBert2DecisionsModel(
         len(tagger),
         tagger=tagger,
         tokenizer=tokenizer,
         mid=args.model_id,
     )
+    device = "cuda:" + str(args.gpu_id) \
+        if args.gpu and torch.cuda.is_available() else "cpu"
     if os.path.isfile(path_to_model):
-        state_dict = torch.load(path_to_model)
-        if isinstance(state_dict, GecBertModel):
+        state_dict = torch.load(path_to_model, map_location=torch.device(device))
+        if isinstance(state_dict, GecBert2DecisionsModel):
             model = state_dict
         else:
             model.load_state_dict(state_dict["model_state_dict"])
@@ -144,8 +154,7 @@ def infer(args):
         logging.info("Model not found at: " + path_to_model)
         return
     model.eval()
-    device = "cuda:" + str(args.gpu_id) \
-        if args.gpu and torch.cuda.is_available() else "cpu"
+
     logging.info(torch.cuda.device_count())
     logging.info("device = " + device)
     model.to(device)
@@ -176,17 +185,31 @@ def infer(args):
                 truncation=True,
                 max_length=510
             ).to(device)
-            logging.info(toks["input_ids"].shape)
+            del toks["token_type_ids"]
+            xi = toks["input_ids"][0][
+                toks["attention_mask"][0].bool()
+            ]
+            logging.info("noise >>> " + " ".join(map(tokenizer._convert_id_to_token, xi.cpu().numpy())))
+            # logging.info(toks["input_ids"].shape)
             with torch.no_grad():
                 out = model(**toks)  # tag_out, attention_mask
                 for k, t in enumerate(batch_txt):
                     batch_txt[k] = apply_tags(
                         t,
-                        out["tag_out"][k].argmax(-1)[out["attention_mask"][k].bool()].cpu(),
+                        out["decision_out"][k].argmax(-1)[
+                            out["attention_mask"][k].bool()
+                        ].cpu().bool(),
+                        out["tag_out"][k].argmax(-1)[
+                            out["attention_mask"][k].bool()
+                        ].cpu(),
                         word_tokenizer,
                         tagger,
                         lexicon
                     )
+                    dec = out["decision_out"][k][
+                        out["attention_mask"][k]
+                    ]
+                    # logging.info(str(dec.long().cpu().numpy()))
                     yy = out["tag_out"][k][out["attention_mask"][k].bool()]
                     yy = torch.softmax(yy, -1)
                     jj = yy.topk(3, dim=-1).indices.cpu()

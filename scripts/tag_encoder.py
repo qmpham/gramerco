@@ -15,35 +15,13 @@ except BaseException:
 
 separ = '￨'
 
-error_type_id = {
-    "DELETE": 0,
-    "COPY": 1,
-    "SWAP": 2,
-    "MERGE": 3,
-    "CASE": 4,
-    "SPLIT": 5,
-    "HYPHEN": 6,
-    "APPEND": 7,
-    "TRANSFORM": 8,
-    "REPLACE": 9,
-}
 
-id_error_type = [
-    "DELETE",
-    "COPY",
-    "SWAP",
-    "MERGE",
-    "CASE",
-    "SPLIT",
-    "HYPHEN",
-    "APPEND",
-    "TRANSFORM",
-    "REPLACE",
-]
 
 def default_keep_tok():
     return '·'
 
+def default_empty():
+    return ''
 
 def default_keep_id():
     return 0
@@ -63,6 +41,32 @@ class TagEncoder:
         self._id_to_tag = defaultdict(default_keep_tok)
         self._tag_to_id = defaultdict(default_keep_id)
         self._curr_cpt = 1
+
+        self.error_type_id = {
+            "DELETE": 0,
+            "COPY": 1,
+            "SWAP": 2,
+            "MERGE": 3,
+            "CASE": 4,
+            "SPLIT": 5,
+            "HYPHEN": 6,
+            "APPEND": 7,
+            "TRANSFORM": 8,
+            "REPLACE": 9,
+        }
+
+        self.id_error_type = [
+            "DELETE",
+            "COPY",
+            "SWAP",
+            "MERGE",
+            "CASE",
+            "SPLIT",
+            "HYPHEN",
+            "APPEND",
+            "TRANSFORM",
+            "REPLACE",
+        ]
 
         self.add_tag("$DELETE")
         self.add_tag("$COPY")
@@ -114,6 +118,155 @@ class TagEncoder:
 
     def tag_to_id(self, tag):
         return self._tag_to_id[tag]
+
+    def add_tag(self, tag):
+        self._id_to_tag[self._curr_cpt] = tag
+        self._tag_to_id[tag] = self._curr_cpt
+        self._curr_cpt += 1
+
+    def get_tag_category(self, tag):
+        if type(tag) == int:
+            # logging.debug(str(tag))
+            tag = self.id_to_tag(tag)
+        error_type = tag[1:].split('_')[0]
+        if error_type in ["ART", "PRO", "PRE", "ADV"]:
+            error_type = "REPLACE"
+        # logging.debug(error_type + "   :   " + tag)
+        # DELETE, COPY, SWAP, SPLIT, HYPHEN, CASE, TRANSFORM, APPEND, REPLACE
+        if error_type in error_type_id:
+            return error_type_id[error_type]
+        return error_type_id["KEEP"]
+
+    def size(self):
+        return self._curr_cpt
+
+    def __len__(self):
+        return self.size()
+
+
+class TagEncoder2(TagEncoder):
+
+    def __init__(
+            self,
+            path_to_lex="/home/bouthors/workspace/gramerco-repo/gramerco/resources/Lexique383.tsv",
+            path_to_app="/home/bouthors/workspace/gramerco-repo/gramerco/resources/lexique.app",
+    ):
+
+        rep = read_rep(path_to_lex)
+        app = read_app(path_to_app)
+        worder = WordEncoder(path_to_app)
+
+        self._id_to_tag = defaultdict(default_keep_tok)
+        self._tag_to_id = defaultdict(default_keep_id)
+        self._curr_cpt = 1
+
+        self.error_type_id = {
+            "DELETE": 0,
+            "COPY": 1,
+            "SWAP": 2,
+            "SPLIT": 3,
+            "MERGE": 4,
+            "SPLIT": 5,
+            "SPLIT_HYPHEN": 6,
+            "MERGE_HYPHEN": 7,
+            "CASE": 8,
+            "CASE_UPPER": 9,
+            "CASE_LOWER": 10,
+            "TRANSFORM": 11,
+            "APPEND": 12,
+            "REPLACE": 13,
+        }
+
+        self.id_error_type = [
+            "DELETE",
+            "COPY",
+            "SWAP",
+            "SPLIT",
+            "MERGE",
+            "SPLIT",
+            "SPLIT_HYPHEN",
+            "MERGE_HYPHEN",
+            "CASE",
+            "CASE_UPPER",
+            "CASE_LOWER",
+            "TRANSFORM",
+            "APPEND",
+            "REPLACE",
+        ]
+
+        self.add_tag("$DELETE")
+        self.add_tag("$COPY")
+        self.add_tag("$SWAP")
+        self.add_tag("$SPLIT")
+        self.add_tag("$MERGE")
+        self.add_tag("$SPLIT_HYPHEN")
+        self.add_tag("$MERGE_HYPHEN")
+        self.add_tag("$CASE")
+        self.add_tag("$CASE_UPPER")
+        self.add_tag("$CASE_LOWER")
+
+        for pos in ["ADJ", "NOM"]:
+            for genre in ["m", "f", "-"]:
+                for nombre in ["s", "p", "-"]:
+                    self.add_tag("$TRANSFORM_" +
+                                 separ.join([pos, genre, nombre]))
+
+        for pos in ["VER", "AUX"]:
+            self.add_tag("$TRANSFORM_" + separ.join([pos, "-", "-", "inf"]))
+
+            for genre in ["m", "f"]:
+                for nombre in ["s", "p"]:
+                    for tense in ["pas", "pre"]:
+                        self.add_tag("$TRANSFORM_" +
+                                     separ.join([pos, genre, nombre, "par", tense]))
+
+            for tense in ["pas", "pre", "fut", "imp"]:
+                for nombre in ["s", "p"]:
+                    for pers in ["1", "2", "3"]:
+                        self.add_tag(
+                            "$TRANSFORM_" + separ.join([pos, "-", "-", "ind", tense, pers + nombre]))
+
+            for nombre in ["s", "p"]:
+                for pers in ["1", "2", "3"]:
+                    self.add_tag(
+                        "$TRANSFORM_" + separ.join([pos, "-", "-", "sub", "pre", pers + nombre]))
+
+        for app_tok in app:
+            self.add_tag("$APPEND_" + app_tok)
+
+        for pos in rep["pos2mot"]:  # ART + PRO + PRE + ADV
+            for tok in rep["pos2mot"][pos]:
+                self.add_tag("$REPLACE_" + tok)
+
+    def is_word_tag(tag):
+        return (tag.startswith("$APPEND")
+                or tag.startswith("$REPLACE")
+                or (tag.startswith("$SPLIT")
+                    and tag != "$SPLIT_HYPHEN"))
+
+    def id_to_type_id(tid):
+        tag = self.id_to_tag(tid)
+        if self.is_word_tag(tag):
+            name = '_'.join(self.id_to_tag(tid).split('_')[:-1])[1:]
+            return self.error_type_id[name]
+        return self.error_type_id[tag[1:]]
+
+    def id_to_word(tid):
+        tag = self.id_to_tag(tid)
+        if self.is_word_tag(tag):
+            return tag.split('_')[-1]
+
+
+class WordEncoder:
+
+    def __init__(
+        self,
+        path_to_voc="/home/bouthors/workspace/gramerco-repo/gramerco/resources/lexique.app",
+    ):
+    voc = read_app(path_to_voc)
+    self.id_to_word = defaultdict(default_keep_id)
+    self.word_to_id = default_dict(default_empty)
+    for word in voc:
 
     def add_tag(self, tag):
         self._id_to_tag[self._curr_cpt] = tag

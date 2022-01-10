@@ -8,7 +8,7 @@ from tqdm import tqdm
 from data.gramerco_dataset import GramercoDataset, make_dataset_from_prefix
 from fairseq.data import iterators, data_utils
 import fairseq.utils as fairseq_utils
-from model_gec.gec_bert import GecBertModel, GecBert2DecisionsModel
+from model_gec.gec_bert import GecBertVocModel
 from model_gec.criterions import DecisionLoss, CompensationLoss, CrossEntropyLoss
 from transformers import FlaubertTokenizer
 from tag_encoder import TagEncoder, error_type_id, id_error_type

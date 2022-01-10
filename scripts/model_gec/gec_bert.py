@@ -154,6 +154,53 @@ class GecBert2DecisionsModel(GecBertModel):
         return super().parameters()
 
 
+class GecBertVocModel(GecBertModel):
+    def __init__(
+        self,
+        num_tag,
+        num_voc,
+        encoder_name="flaubert/flaubert_base_cased",
+        tokenizer=None,
+        tagger=None,
+        mid=None,
+        freeze_encoder=False,
+        dropout=0.,
+    ):
+        super(GecBertModel, self).__init__(num_tag)
+        h_size = self.encoder.attentions[0].out_lin.out_features
+        self.voc_layer = nn.Linear(h_size, num_voc)
+
+    def forward(self, **inputs):
+        if self.freeze_encoder:
+            with torch.no_grad():
+                h = self.encoder(**inputs)
+        else:
+            h = self.encoder(**inputs)
+
+        word_index = self._generate_word_index(
+            inputs["input_ids"]).to(h.last_hidden_state.device)
+
+        h_w = word_collate(h.last_hidden_state, word_index)
+
+        attention_mask_larger = word_collate(
+            inputs["attention_mask"].unsqueeze(-1), word_index, agregation="max"
+        ).squeeze(-1)
+        attention_mask = torch.zeros_like(
+            attention_mask_larger).to(h.last_hidden_state.device)
+        attention_mask[:, 1:-1] = attention_mask_larger[:, 2:]
+        out_tag = self.linear_layer(h_w)
+        out_voc = self.linear_voc(h_w)
+
+        # out = torch.softmax(out, -1)
+        # out = self.ls(out)
+        return {"tag_out": out_tag, "voc_out": out_voc, "attention_mask": attention_mask}
+
+    def parameters(self):
+        if self.freeze_encoder:
+            return iter(self.tag_layer.parameters(), self.voc_layer.parameters())
+        return super().parameters()
+
+
 def create_logger(logfile, loglevel):
     numeric_level = getattr(logging, loglevel.upper(), None)
     if not isinstance(numeric_level, int):
