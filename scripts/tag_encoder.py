@@ -16,12 +16,13 @@ except BaseException:
 separ = '￨'
 
 
-
 def default_keep_tok():
     return '·'
 
+
 def default_empty():
     return ''
+
 
 def default_keep_id():
     return 0
@@ -125,7 +126,7 @@ class TagEncoder:
         self._curr_cpt += 1
 
     def get_tag_category(self, tag):
-        if type(tag) == int:
+        if isinstance(tag, int):
             # logging.debug(str(tag))
             tag = self.id_to_tag(tag)
         error_type = tag[1:].split('_')[0]
@@ -148,96 +149,82 @@ class TagEncoder2(TagEncoder):
 
     def __init__(
             self,
-            path_to_lex="/home/bouthors/workspace/gramerco-repo/gramerco/resources/Lexique383.tsv",
-            path_to_app="/home/bouthors/workspace/gramerco-repo/gramerco/resources/lexique.app",
+            path_to_lex="/nfs/RESEARCH/bouthors/projects/gramerco/resources/Lexique383.tsv",
+            path_to_voc="/nfs/RESEARCH/bouthors/projects/gramerco/resources/common/french.dic.20k",
     ):
 
         rep = read_rep(path_to_lex)
-        app = read_app(path_to_app)
-        self.worder = WordEncoder(path_to_app)
+        voc = read_app(path_to_voc)
+        self.worder = WordEncoder(path_to_voc)
 
         self._id_to_tag = defaultdict(default_keep_tok)
         self._tag_to_id = defaultdict(default_keep_id)
         self._curr_cpt = 1
+        self._w_cpt = 0
 
         self.id_error_type = [
+            "KEEP",  # .
             "DELETE",
-            "COPY",
             "SWAP",
             "SPLIT",
             "MERGE",
-            "SPLIT_HYPHEN",
-            "MERGE_HYPHEN",
-            "CASE",
-            "CASE_UPPER",
-            "CASE_LOWER",
-            "TRANSFORM",
-            "APPEND",
-            "REPLACE",
-            "SPLIT",
+            "HYPHEN:SPLIT",
+            "HYPHEN:MERGE",
+            "CASE:FIRST",
+            "CASE:UPPER",
+            "CASE:LOWER",
+            "INFLECT",  # inflections
+            "APPEND",  # word
+            "REPLACE:INFLECTION",  # word
+            "REPLACE:HOMOPHONE",  # word
+            "REPLACE:SPELL",  # word
+            "SPLIT",  # word
         ]
 
         self.error_type_id = {
             key: i for i, key in enumerate(self.id_error_type)
         }
+        for error in self.id_error_type[1:-6]:
+            self.add_tag("$" + error)
+        # self.add_tag("$DELETE")
+        # self.add_tag("$COPY")
+        # self.add_tag("$SWAP")
+        # # self.add_tag("$SPLIT")
+        # self.add_tag("$MERGE")
+        # self.add_tag("$SPLIT_HYPHEN")
+        # self.add_tag("$MERGE_HYPHEN")
+        # self.add_tag("$CASE")
+        # self.add_tag("$CASE_UPPER")
+        # self.add_tag("$CASE_LOWER")
 
-        self.add_tag("$DELETE")
-        self.add_tag("$COPY")
-        self.add_tag("$SWAP")
-        # self.add_tag("$SPLIT")
-        self.add_tag("$MERGE")
-        self.add_tag("$SPLIT_HYPHEN")
-        self.add_tag("$MERGE_HYPHEN")
-        self.add_tag("$CASE")
-        self.add_tag("$CASE_UPPER")
-        self.add_tag("$CASE_LOWER")
+        with open(
+            "/nfs/RESEARCH/bouthors/projects/gramerco/resources/common/morphs-tag.txt",
+            'r'
+        ) as f:
+            for line in f.readlines():
+                self.add_tag("$INFLECT:" + line)
 
-        for pos in ["ADJ", "NOM"]:
-            for genre in ["m", "f", "-"]:
-                for nombre in ["s", "p", "-"]:
-                    self.add_tag("$TRANSFORM_" +
-                                 separ.join([pos, genre, nombre]))
+        self.add_tag("$APPEND", word=True)
+        self.add_tag("$REPLACE:INFLECTION", word=True)
+        self.add_tag("$REPLACE:HOMOPHONE", word=True)
+        self.add_tag("$REPLACE:SPELL", word=True)
+        self.add_tag("$SPLIT", word=True)
 
-        for pos in ["VER", "AUX"]:
-            self.add_tag("$TRANSFORM_" + separ.join([pos, "-", "-", "inf"]))
-
-            for genre in ["m", "f"]:
-                for nombre in ["s", "p"]:
-                    for tense in ["pas", "pre"]:
-                        self.add_tag("$TRANSFORM_" +
-                                     separ.join([pos, genre, nombre, "par", tense]))
-
-            for tense in ["pas", "pre", "fut", "imp"]:
-                for nombre in ["s", "p"]:
-                    for pers in ["1", "2", "3"]:
-                        self.add_tag(
-                            "$TRANSFORM_" + separ.join([pos, "-", "-", "ind", tense, pers + nombre]))
-
-            for nombre in ["s", "p"]:
-                for pers in ["1", "2", "3"]:
-                    self.add_tag(
-                        "$TRANSFORM_" + separ.join([pos, "-", "-", "sub", "pre", pers + nombre]))
-
-        self.add_tag("$APPEND")
-        self.add_tag("$REPLACE")
-        self.add_tag("$SPLIT")
-        # for app_tok in app:
-        #     self.add_tag("$APPEND_" + app_tok)
-        #
-        # for pos in rep["pos2mot"]:  # ART + PRO + PRE + ADV
-        #     for tok in rep["pos2mot"][pos]:
-        #         self.add_tag("$REPLACE_" + tok)
+    def add_tag(self, tag, word=False):
+        self._id_to_tag[self._curr_cpt] = tag
+        self._tag_to_id[tag] = self._curr_cpt
+        self._curr_cpt += 1
+        self._w_cpt += int(word)
 
     def id_to_tag(self, i):
-        if i < self.size - 3:
-            self._id_to_tag[i]
-        j = i - self._curr_cpt + 3
+        if i < self.size() - self._w_cpt:
+            return self._id_to_tag[i]
+        j = i - self._curr_cpt + self._w_cpt
         tag = j // len(self.worder)
         word = j % len(self.worder)
 
         return (
-            "$" +
-            self.id_error_type[self._curr_cpt - tag - 1] +
+            self._id_to_tag[self._curr_cpt - tag - 1] +
             "_" +
             self.worder.id_to_word[word]
         )
@@ -247,62 +234,112 @@ class TagEncoder2(TagEncoder):
             tags = tag.split('_')
             word = tags[-1]
             word = self.worder.word_to_id[word]
-            tag = '_'.join(tags[:-1])[1:]
-            cls = self.error_type_id[tag]
+            # logging.info(tag)
+            tag = '_'.join(tags[:-1])
+            cls = self._tag_to_id[tag]
             cls = self._curr_cpt - cls - 1
-            return self._curr_cpt - 3 + len(worder) * cls + word
+            #
+            # logging.info(" ".join([str(self._curr_cpt), str(self._w_cpt), str(len(self.worder)), str(cls), str(word)]))
+            # logging.info(" ".join([str(type(self._curr_cpt)), str(type(self._w_cpt)), str(type(len(self.worder))), str(type(cls)), str(type(word))]))
+            return self._curr_cpt - self._w_cpt + len(self.worder) * cls + word
 
         return self._tag_to_id[tag[1:]]
 
-    def is_word_tag(tag):
-        return (tag.startswith("$APPEND")
-                or tag.startswith("$REPLACE")
-                or (tag.startswith("$SPLIT")
-                    and tag != "$SPLIT_HYPHEN"))
+    def id_to_tag_id(self, i):
+        if i < self.size() - self._w_cpt:
+            return i
+        return self.size() - ((i - self.size() + self._w_cpt) // len(self.worder)) - 1
 
-    def id_to_type_id(tid):
+    def id_to_tag_id_vec(self, x):
+        y = x.clone()
+        mask = (x >= (self.size() - self._w_cpt))
+        y[mask] = (
+            self.size() -
+            torch.div(
+                x[mask] - self.size() + self._w_cpt,
+                len(self.worder),
+                rounding_mode='floor'
+            ) -
+            1
+        )
+        return y
+
+    def id_to_word_id(self, i):
+        if i < self.size() - self._w_cpt:
+            # not APPEND, REPLACE, SPLIT
+            return -1
+        # if i >= self.size() - self._w_cpt + (self._w_cpt - 1) * len(self.worder):
+        #     # APPEND
+        #     return -1
+        return ((i - self.size() + self._w_cpt) % len(self.worder))
+
+    def id_to_word_id_vec(self, x):
+        y = x.new(x.shape).fill_(-1)
+        mask = (x >= (self.size() - self._w_cpt))
+        y[mask] = (
+            torch.remainder(
+                x[mask] - self.size() + self._w_cpt,
+                len(self.worder)
+            )
+        )
+        return y
+
+    def encode_line(self, line):
+        return torch.tensor(
+            list(map(self.tag_to_id, line.split(" "))), dtype=torch.int64)
+
+    def is_word_tag(self, tag):
+        # return (tag.startswith("$APPEND")
+        #         or tag.startswith("$REPLACE")
+        #         or (tag == "$SPLIT")
+        #         )
+        return '_' in tag
+
+    def id_to_type_id(self, tid):
         tag = self.id_to_tag(tid)
         if self.is_word_tag(tag):
-            name = '_'.join(self.id_to_tag(tid).split('_')[:-1])[1:]
+            name = self.id_to_tag(tid)[1:].split('_')[0]
             return self.error_type_id[name]
         return self.error_type_id[tag[1:]]
 
-    def id_to_word(tid):
+    def id_to_word(self, tid):
         tag = self.id_to_tag(tid)
         if self.is_word_tag(tag):
             return tag.split('_')[-1]
+
+    def get_tag_category(self, tag):
+        if isinstance(tag, int):
+            tag = self.id_to_tag(tag)
+        if self.is_word_tag(tag):
+            error_type = tag[1:].split('_')[0]
+            return self.error_type_id[error_type]
+        if tag.startswith("$INFLECT"):
+            return self.error_type_id["INFLECT"]
+        if tag[1:] in self.error_type_id:
+            return self.error_type_id[tag[1:]]
+        return self.error_type_id["KEEP"]
+
+    def get_num_encodable(self):
+        return self.size() + self._w_cpt * (len(self.worder) - 1)
 
 
 class WordEncoder:
 
     def __init__(
         self,
-        path_to_voc="/home/bouthors/workspace/gramerco-repo/gramerco/resources/lexique.app",
+        path_to_voc="/nfs/RESEARCH/bouthors/projects/gramerco/resources/common/french.dic.20k",
     ):
-    voc = read_app(path_to_voc)
-    self.id_to_word = defaultdict(default_keep_id)
-    self.word_to_id = default_dict(default_empty)
-    self._curr_cpt = 0
-    for word in voc:
-        self.add_word(word)
+        voc = read_app(path_to_voc)
+        self.id_to_word = defaultdict(default_keep_id)
+        self.word_to_id = defaultdict(default_empty)
+        self._curr_cpt = 0
+        for word in voc:
+            self.add_word(word)
 
     def add_word(self, word):
-        self._id_to_word[self._curr_cpt] = word
-        self._word_to_id[word] = self._curr_cpt
+        self.id_to_word[self._curr_cpt] = word
+        self.word_to_id[word] = self._curr_cpt
         self._curr_cpt += 1
-
-    def get_tag_category(self, tag):
-        if type(tag) == int:
-            # logging.debug(str(tag))
-            tag = self.id_to_tag(tag)
-        error_type = tag[1:].split('_')[0]
-        if error_type in ["ART", "PRO", "PRE", "ADV"]:
-            error_type = "REPLACE"
-        # logging.debug(error_type + "   :   " + tag)
-        # DELETE, COPY, SWAP, SPLIT, HYPHEN, CASE, TRANSFORM, APPEND, REPLACE
-        if error_type in error_type_id:
-            return error_type_id[error_type]
-        return error_type_id["KEEP"]
 
     def size(self):
         return self._curr_cpt
@@ -313,7 +350,50 @@ class WordEncoder:
 
 if __name__ == "__main__":
 
-    tagger = TagEncoder()
+    tagger = TagEncoder2()
 
     from noiser.Noise import Lexicon
     lexicon = Lexicon("../resources/Lexique383.tsv")
+
+    for i in range(300):
+        tag = tagger.id_to_tag(i)
+        # print(i, tag)
+        # tagger.tag_to_id(tag)
+        # tagger.id_to_tag_id(i)
+        # tagger.id_to_word_id(i)
+        print(
+            i,
+            tag,
+            tagger.tag_to_id(tag),
+            '\t\t\t',
+            tagger.id_to_tag_id(i),
+            tagger.id_to_word_id(i))
+
+    for i in range(300, 20000 * 5, 5000):
+        tag = tagger.id_to_tag(i)
+        # print(i, tag)
+        # tagger.tag_to_id(tag)
+        # tagger.id_to_tag_id(i)
+        # tagger.id_to_word_id(i)
+        print(
+            i,
+            tag,
+            tagger.tag_to_id(tag),
+            '\t\t\t',
+            tagger.id_to_tag_id(i),
+            tagger.id_to_word_id(i))
+    i = 3000
+    print(i, tagger.id_to_tag(i))
+    print(tagger.size())
+    print(tagger.worder.size())
+    print(tagger.error_type_id)
+
+    print(tagger.is_word_tag("$REPLACE:SPELL_ainsi"))
+    print(tagger.is_word_tag(
+        "$INFLECT:VERB;Mood=Ind;Number=Plur;Person=1;Tense=Pres;VerbForm=Fin"))
+    print("$REPLACE:SPELL_ainsi", tagger.tag_to_id("$REPLACE:SPELL_ainsi"))
+
+    print(tagger.worder.word_to_id["prestement"])
+    print(tagger.worder.id_to_word[1662])
+
+    tagger.get_tag_category("$REPLACE:SPELL_ainsi")

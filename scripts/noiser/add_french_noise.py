@@ -394,12 +394,12 @@ def read_rep(f):
 
 
 def read_app(f):
-    mots = set()
+    mots = list()
     if not f:
         return mots
     with open(f, "r", encoding="ISO-8859-1") as fd:
         for l in fd:
-            mots.add(l.rstrip())
+            mots.append(l.rstrip())
     return mots
 
 

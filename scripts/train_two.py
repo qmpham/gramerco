@@ -9,9 +9,9 @@ from data.gramerco_dataset import GramercoDataset, make_dataset_from_prefix
 from fairseq.data import iterators, data_utils
 import fairseq.utils as fairseq_utils
 from model_gec.gec_bert import GecBertVocModel
-from model_gec.criterions import DecisionLoss, CompensationLoss, CrossEntropyLoss
+from model_gec.criterions import DecisionLoss, CompensationLoss, CrossEntropyLoss, CETwoLoss
 from transformers import FlaubertTokenizer
-from tag_encoder import TagEncoder, error_type_id, id_error_type
+from tag_encoder import TagEncoder, TagEncoder2
 
 import os
 import sys
@@ -112,9 +112,9 @@ def load_data(args, tagger, tokenizer):
 def train(args, device):
 
     tokenizer = FlaubertTokenizer.from_pretrained(args.tokenizer)
-    tagger = TagEncoder(
+    tagger = TagEncoder2(
         path_to_lex=args.path_to_lex,
-        path_to_app=args.path_to_app
+        path_to_app=args.path_to_voc
     )
 
     if args.continue_from and args.continue_from != "none":
@@ -123,24 +123,16 @@ def train(args, device):
         model_id = args.model_id if args.model_id else str(int(time.time()))
         model_id = model_id + "-" + args.model_type
 
-    if args.model_type in ["decision2"]:
-        model = GecBert2DecisionsModel(
-            len(tagger),
-            tagger=tagger,
-            tokenizer=tokenizer,
-            mid=model_id,
-            freeze_encoder=(args.freeze_encoder > 0),
-            dropout=args.dropout,
-        ).to(device)
-    else:
-        model = GecBertModel(
-            len(tagger),
-            tagger=tagger,
-            tokenizer=tokenizer,
-            mid=model_id,
-            freeze_encoder=(args.freeze_encoder > 0),
-            dropout=args.dropout,
-        ).to(device)
+    model = GecBertVocModel(
+        len(tagger),
+        len(tagger.worder),
+        tokenizer=tokenizer,
+        tagger=tagger,
+        mid=model_id,
+        freeze_encoder=(args.freeze_encoder > 0),
+        dropout=args.dropout,
+    ).to(device)
+
     try:
         os.mkdir(os.path.join(args.save, model.id))
         if args.tensorboard:
@@ -174,18 +166,8 @@ def train(args, device):
         model_info = None
 
     train_iter, valid_iter, test_iter = load_data(args, tagger, tokenizer)
-    # criterion = LabelSmoothingLoss(smoothing=0.02)
-    if args.model_type == "normal1":
-        criterion = CrossEntropyLoss(label_smoothing=args.label_smoothing)
-    elif args.model_type == "decision2":
-        criterion = DecisionLoss(
-            label_smoothing=args.label_smoothing,
-            beta=args.decision_weight,
-        )
-    elif args.model_type == "compensation1":
-        criterion = CompensationLoss(label_smoothing=args.label_smoothing)
-    else:
-        raise ValueError("No corresponding loss found!")
+
+    criterion = CETwoLoss(label_smoothing=args.label_smoothing)
 
     if model_info:
         num_iter = (model_info["num_iter"] + 1 - 1)
@@ -236,25 +218,13 @@ def train(args, device):
 
             if device == "cuda":
                 batch = fairseq_utils.move_to_cuda(batch)
-            # logging.debug("-" * 72)
             model.train()
             criterion.train()
-            # optimizer.zero_grad()
 
             #  TRAIN STEP
 
-            # logging.debug("noise data " +
-            #               str(batch["noise_data"]["input_ids"].shape)
-            #               )
-            # logging.debug(batch["noise_data"]["attention_mask"].sum(-1))
-            # logging.debug("tag data " +
-            #               str(batch["tag_data"]["input_ids"].shape)
-            #               )
-            # logging.debug(batch["tag_data"]["attention_mask"].sum(-1))
-
             out = model(**batch["noise_data"])
-            # logging.debug("tag out " + str(out["tag_out"].shape))
-            # logging.debug(out["attention_mask"].sum(-1))
+            # tag_out, voc_out, attention_mask
 
             sizes_out = out["attention_mask"].sum(-1)
             sizes_tgt = batch["tag_data"]["attention_mask"].sum(-1)
@@ -271,7 +241,7 @@ def train(args, device):
             #     logging.debug(tokenizer.convert_ids_to_tokens(batch["noise_data"][
             #         "input_ids"][~coincide_mask][0][batch["noise_data"]["attention_mask"][~coincide_mask][0].bool()]))
 
-            loss = criterion(out, tgt, coincide_mask, batch,
+            loss = criterion(out, tgt, coincide_mask, batch, tagger,
                              mask_keep_prob=args.random_keep_mask)
             # sys.exit(8)
             loss.backward()
@@ -352,18 +322,18 @@ def train(args, device):
                         TP = 0
                         FN = 0
                         FP = 0
-                        accs = np.zeros(len(id_error_type))
-                        lens = np.zeros(len(id_error_type))
+                        accs = np.zeros(len(tagger.id_error_type))
+                        lens = np.zeros(len(tagger.id_error_type))
                         for valid_batch in tqdm(valid_iter.next_epoch_itr()):
                             if device == "cuda":
                                 valid_batch = fairseq_utils.move_to_cuda(
-                                    valid_batch)
+                                    valid_batch
+                                )
 
                             out = model(**valid_batch["noise_data"])
 
                             sizes_out = out["attention_mask"].sum(-1)
-                            sizes_tgt = valid_batch["tag_data"]["attention_mask"].sum(
-                                -1)
+                            sizes_tgt = valid_batch["tag_data"]["attention_mask"].sum(-1)
                             coincide_mask = sizes_out == sizes_tgt
 
                             #
@@ -371,34 +341,36 @@ def train(args, device):
 
                             tgt = valid_batch["tag_data"]["input_ids"]
                             tgt_mask = valid_batch["tag_data"]["attention_mask"]
-                            ref_dec = tgt[coincide_mask][tgt_mask[coincide_mask].bool()].bool()
-                            pred_dec = out["decision_out"][coincide_mask][
-                                    out["attention_mask"][coincide_mask].bool()
-                                ].argmax(-1).bool()
-                            ref_tag = tgt[coincide_mask][tgt_mask[coincide_mask].bool()]
+                            tgt_tag = tagger.id_to_tag_id_vec(tgt)
+                            tgt_voc = tagger.id_to_word_id_vec(tgt)
+                            # ref_dec = tgt[coincide_mask][tgt_mask[coincide_mask].bool()].bool()
+                            # pred_dec = out["decision_out"][coincide_mask][
+                            #         out["attention_mask"][coincide_mask].bool()
+                            #     ].argmax(-1).bool()
+                            ref_tag = tgt_tag[coincide_mask][tgt_mask[coincide_mask].bool()]
                             pred_tag = out["tag_out"][coincide_mask][
                                     out["attention_mask"][coincide_mask].bool()
                                 ].argmax(-1)
-                            TP += ((pred_dec == ref_dec) &
-                                   ref_dec).long().sum().item()
-                            # TN += ((pred == ref) & ~ref).long().sum().item()
-                            FN += ((pred_dec != ref_dec) &
-                                   ref_dec).long().sum().item()
-                            FP += ((pred_dec != ref_dec) & ~
-                                   ref_dec).long().sum().item()
+                            # TP += ((pred_dec == ref_dec) &
+                            #        ref_dec).long().sum().item()
+                            # # TN += ((pred == ref) & ~ref).long().sum().item()
+                            # FN += ((pred_dec != ref_dec) &
+                            #        ref_dec).long().sum().item()
+                            # FP += ((pred_dec != ref_dec) & ~
+                            #        ref_dec).long().sum().item()
 
-                            pred_types = (pred_tag[ref_dec.ne(0)].clone().to("cpu") + 1).apply_(
+                            pred_types = pred_tag.clone().cpu().apply_(
                                 tagger.get_tag_category).long()
-                            ref_types = (ref_tag[ref_dec.ne(0)].clone().to("cpu")).apply_(
+                            ref_types = ref_tag.clone().cpu().apply_(
                                 tagger.get_tag_category).long()
-                            for err_id in range(len(id_error_type)):
+                            for err_id in range(len(tagger.id_error_type)):
                                 pred_types_i = pred_types[ref_types == err_id]
                                 ref_types_i = ref_types[ref_types == err_id]
                                 accs[err_id] += (pred_types_i == ref_types_i).long().sum().item()
                                 lens[err_id] += len(ref_types_i)
 
                             val_loss = criterion(
-                                out, tgt, coincide_mask, valid_batch
+                                out, tgt, coincide_mask, valid_batch, tagger,
                             ).item()
                             val_losses.append(val_loss)
                         del valid_batch
@@ -409,33 +381,33 @@ def train(args, device):
                             num_iter,
                         )
 
-                        recall = TP / (TP + FN)
-                        precision = TP / (TP + FP)
+                        # recall = TP / (TP + FN)
+                        # precision = TP / (TP + FP)
 
-                        F2_score = 5 * recall * precision / \
-                            (4 * precision + recall)
-                        for err_id in range(len(id_error_type)):
+                        # F2_score = 5 * recall * precision / \
+                        #     (4 * precision + recall)
+                        for err_id in range(len(tagger.id_error_type)):
                             writer.add_scalar(
-                                "ErrorType/{}".format(id_error_type[err_id]),
+                                "ErrorType/{}".format(tagger.id_error_type[err_id]),
                                 (accs[err_id] + 1) / (lens[err_id] + 1),
                                 num_iter,
                             )
 
-                        writer.add_scalar(
-                            os.path.join("Error/detection_rate"),
-                            recall,
-                            num_iter,
-                        )
-                        writer.add_scalar(
-                            os.path.join("Error/precision"),
-                            precision,
-                            num_iter,
-                        )
-                        writer.add_scalar(
-                            os.path.join("Error/F2_score"),
-                            F2_score,
-                            num_iter,
-                        )
+                        # writer.add_scalar(
+                        #     os.path.join("Error/detection_rate"),
+                        #     recall,
+                        #     num_iter,
+                        # )
+                        # writer.add_scalar(
+                        #     os.path.join("Error/precision"),
+                        #     precision,
+                        #     num_iter,
+                        # )
+                        # writer.add_scalar(
+                        #     os.path.join("Error/F2_score"),
+                        #     F2_score,
+                        #     num_iter,
+                        # )
 
                         stopper(val_loss)
 
@@ -477,7 +449,8 @@ def train(args, device):
                 tgt = test_batch["tag_data"]["input_ids"]
 
                 test_loss = criterion(
-                    out, tgt, coincide_mask, test_batch).item()
+                    out, tgt, coincide_mask, test_batch, tagger
+                ).item()
                 test_losses.append(test_loss)
             test_loss = sum(test_losses) / len(test_losses)
             logging.info("MODEL test loss: " + str(test_loss))
@@ -551,10 +524,10 @@ if __name__ == "__main__":
         "--path-to-lex", "--lex", required=True, help="Path to Lexique383.tsv",
     )
     parser.add_argument(
-        "--path-to-app",
-        "--app",
+        "--path-to-voc",
+        "--voc",
         required=True,
-        help="Path to appendable words file.",
+        help="Path to vocabulary file.",
     )
     parser.add_argument(
         "--tokenizer",
@@ -616,12 +589,12 @@ if __name__ == "__main__":
         default=2,
         help="Number of epochs"
     )
-    parser.add_argument(
-        "--decision-weight",
-        type=float,
-        default=0.1,
-        help="Value of the tag loss weight w.r.t. to the decision loss one."
-    )
+    # parser.add_argument(
+    #     "--decision-weight",
+    #     type=float,
+    #     default=0.1,
+    #     help="Value of the tag loss weight w.r.t. to the decision loss one."
+    # )
     parser.add_argument(
         "-lr",
         "--learning-rate",

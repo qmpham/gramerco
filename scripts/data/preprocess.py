@@ -14,7 +14,7 @@ from fairseq.file_chunker_utils import find_offsets
 pwd = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(pwd))
 sys.path.append(os.path.dirname(os.path.abspath(pwd)))
-from tag_encoder import TagEncoder
+from tag_encoder import TagEncoder, TagEncoder2
 from transformers import FlaubertTokenizer
 from dictionary import Dictionary
 import argparse
@@ -163,13 +163,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-workers", default=1, type=int, help="Number of workers to parallelize",
     )
+    parser.add_argument(
+        "--version", default=1, type=int, help="Version of the Tag Encoder",
+    )
     args = parser.parse_args()
 
     create_logger("stderr", args.log)
-
-    tagger = TagEncoder(path_to_lex=args.lex, path_to_app=args.app,)
+    if args.version == 2:
+        tagger = TagEncoder2(path_to_lex=args.lex, path_to_app=args.app,)
+    else:
+        tagger = TagEncoder(path_to_lex=args.lex, path_to_app=args.app,)
     tokenizer = FlaubertTokenizer.from_pretrained("flaubert/flaubert_base_cased")
-    voc_tag = Dictionary(tagger, encoder_type="tag_encoder")
+    voc_tag = Dictionary(tagger, encoder_type="tag_encoder", version=args.version)
     voc_tok = Dictionary(tokenizer, encoder_type="tokenizer")
 
     for suffix in ["", ".tag", ".noise"]:

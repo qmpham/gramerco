@@ -159,14 +159,9 @@ class GecBertVocModel(GecBertModel):
         self,
         num_tag,
         num_voc,
-        encoder_name="flaubert/flaubert_base_cased",
-        tokenizer=None,
-        tagger=None,
-        mid=None,
-        freeze_encoder=False,
-        dropout=0.,
+        **kwargs
     ):
-        super(GecBertModel, self).__init__(num_tag)
+        super(GecBertVocModel, self).__init__(num_tag, **kwargs)
         h_size = self.encoder.attentions[0].out_lin.out_features
         self.voc_layer = nn.Linear(h_size, num_voc)
 
@@ -189,7 +184,7 @@ class GecBertVocModel(GecBertModel):
             attention_mask_larger).to(h.last_hidden_state.device)
         attention_mask[:, 1:-1] = attention_mask_larger[:, 2:]
         out_tag = self.linear_layer(h_w)
-        out_voc = self.linear_voc(h_w)
+        out_voc = self.voc_layer(h_w)
 
         # out = torch.softmax(out, -1)
         # out = self.ls(out)
@@ -197,7 +192,10 @@ class GecBertVocModel(GecBertModel):
 
     def parameters(self):
         if self.freeze_encoder:
-            return iter(self.tag_layer.parameters(), self.voc_layer.parameters())
+            return iter(itertools.chain(
+                self.linear_layer.parameters(),
+                self.voc_layer.parameters()
+            ))
         return super().parameters()
 
 

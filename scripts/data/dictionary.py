@@ -14,35 +14,47 @@ class Dictionary:
     """A mapping from symbols to consecutive integers"""
 
     def __init__(
-        self, encoder, encoder_type,
+        self,
+        encoder,
+        encoder_type,
+        version=1
     ):
         assert encoder_type in ["tag_encoder", "tokenizer"]
         self.encoder = encoder
         self.encoder_type = encoder_type
-        self.dic_itt = (
-            encoder._id_to_tag if encoder_type == "tag_encoder" else encoder.encoder
-        )
-        self.dic_tti = (
-            encoder._tag_to_id if encoder_type == "tag_encoder" else encoder.decoder
-        )
+        self.version = version
+        if version:
+            self.dic_itt = (
+                encoder._id_to_tag if encoder_type == "tag_encoder" else encoder.encoder
+            )
+            self.dic_tti = (
+                encoder._tag_to_id if encoder_type == "tag_encoder" else encoder.decoder
+            )
         self.unk_index = (
             0 if self.encoder_type == "tag_encoder" else self.encoder.unk_token
         )
-        self.unk_word = self.dic_itt[self.unk_index]
+        self.unk_word = (
+            self.dic_itt[self.unk_index] if self.version == 1
+            else self.encoder._id_to_tag[0]
+        )
         self.indices = {}
 
     def __eq__(self, other):
         return self.indices == other.indices
 
     def __getitem__(self, idx):
+        if self.version == 2:
+            return self.encoder.id_to_tag(idx)
         if idx < len(self.dic_itt):
             return self.dic_itt.get(idx, self.unk_index)
 
-    def get_count(self, idx):
-        return self.count[idx]
+    # def get_count(self, idx):
+    #     return self.count[idx]
 
     def __len__(self):
         """Returns the number of symbols in the dictionary"""
+        if self.version == 2:
+            return self.encoder.get_num_encodable()
         return len(self.dic_itt)
 
     def __contains__(self, sym):
@@ -51,6 +63,8 @@ class Dictionary:
     def index(self, sym):
         """Returns the index of the specified symbol"""
         assert isinstance(sym, str)
+        if self.version == 2:
+            return self.encoder.tag_to_id(sym)
         if sym in self.dic_tti:
             return self.dic_tti[sym]
         return self.unk_index

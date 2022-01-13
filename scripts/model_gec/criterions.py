@@ -97,3 +97,52 @@ class CompensationLoss(torch.nn.Module):
         loss_tag = self.ce(y[mask_final], t[mask_final])
 
         return loss_decision + loss_tag
+
+class CETwoLoss(torch.nn.Module):
+
+    def __init__(self, label_smoothing=0.0, beta=1.):
+        super(CETwoLoss, self).__init__()
+        self.ce = torch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+        self.beta = beta
+        logging.info("decision loss weight = " + str(self.beta))
+
+    def forward(self, out, tgt, mask, x, tagger, mask_keep_prob=0):
+        assert "voc_out" in out
+        att_mask_out = out["attention_mask"][mask].bool()
+        att_mask_in = x["tag_data"]["attention_mask"][mask].bool()
+
+        # logging.debug("attention mask in " + str(att_mask_in[:4].long()))
+        # logging.debug("attention mask in " + str(att_mask_in[:4].long().sum(-1)))
+        # logging.debug("attention mask out " + str(att_mask_out[:4].long()))
+        # logging.debug("attention mask out " + str(att_mask_out[:4].long().sum(-1)))
+        # logging.debug("tgt " + str(tgt[mask][:5]))
+        #
+        # logging.debug("out = " + str(out["decision_out"][mask][att_mask_out][:20]))
+        # logging.debug("tgt = " + str(tgt[mask][att_mask_in].bool().long()[:20]))
+        y_tag = out["tag_out"][mask][att_mask_out]
+        y_word = out["tag_out"][mask][att_mask_out]
+        t = tgt[mask][att_mask_in].long()
+        t_tag = tagger.id_to_tag_id_vec(t)
+        t_word = tagger.id_to_word_id_vec(t)
+        keep_mask = t_tag.ne(0) | (
+            torch.rand(
+                t.shape,
+                device=t.device
+            ) > mask_keep_prob
+        )
+        loss_tag = self.ce(
+            y_tag[keep_mask],
+            t_tag[keep_mask],
+        )
+
+        voc_mask = t_word.ne(-1)
+        y_voc = out["voc_out"][mask][att_mask_out][voc_mask]
+        t_voc = t_word[voc_mask]
+        loss_voc = self.ce(
+            y_voc,
+            t_voc,
+        )
+        if not voc_mask.any():
+            loss_voc = torch.zeros_like(loss_voc)
+
+        return loss_tag + self.beta * loss_voc
