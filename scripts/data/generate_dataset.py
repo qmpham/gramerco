@@ -17,7 +17,7 @@ BUFFER_SIZE = 1000000000
 
 
 def decode(line, get_tags=True):
-    tuples = line.rstrip().split(" ")
+    tuples = line.rstrip('\n').rstrip().split(" ")
     tuples = [t.split(separ) for t in tuples]
     text = " ".join([t[0] for t in tuples])
     text = re.sub(" '", "'", text)
@@ -40,29 +40,38 @@ def create_dataset(file, target_file):
     with open(file, "r") as f:
         first = True
         tags = None
+        ref = None
+        N = 4
+        k = -1
         data = f.readlines(BUFFER_SIZE)
+        written_once = False
+        tag_choice = list()
+        noise_choice = list()
         while data:
+            logging.info("---")
             for line in data:
-                if line == "\n":
-                    first = True
-                elif first:
-                    if tags is not None:
-                        file_clean.write("\n")
-                        file_noise.write("\n")
-                        file_tag.write("\n")
-                    ref, tags = decode(line)
-                    file_clean.write(ref)
-                    file_noise.write(ref)
-                    file_tag.write(tags)
-                    first = False
-                else:
-                    file_clean.write("\n")
-                    file_noise.write("\n")
-                    file_tag.write("\n")
-                    text, tags = decode(line)
-                    file_clean.write(ref)
-                    file_noise.write(text)
-                    file_tag.write(tags)
+                if k == N - 1:
+                    if len(tag_choice) == 4:
+                        i = random.randint(0, N - 1)
+                        if written_once:
+                            file_clean.write("\n")
+                            file_noise.write("\n")
+                            file_tag.write("\n")
+                        file_clean.write(noise_choice[0])
+                        file_noise.write(noise_choice[i])
+                        file_tag.write(tag_choice[i])
+                        tag_choice = list()
+                        noise_choice = list()
+                        written_once = True
+                    else:
+                        sys.exit(8)
+                    k = -1
+
+                text, tags = decode(line)
+                tag_choice.append(tags)
+                noise_choice.append(text)
+                k += 1
+
             data = f.readlines(BUFFER_SIZE)
 
     file_clean.close()

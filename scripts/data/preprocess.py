@@ -170,7 +170,7 @@ if __name__ == "__main__":
 
     create_logger("stderr", args.log)
     if args.version == 2:
-        tagger = TagEncoder2(path_to_lex=args.lex, path_to_app=args.app,)
+        tagger = TagEncoder2(path_to_lex=args.lex, path_to_voc=args.app,)
     else:
         tagger = TagEncoder(path_to_lex=args.lex, path_to_app=args.app,)
     tokenizer = FlaubertTokenizer.from_pretrained("flaubert/flaubert_base_cased")

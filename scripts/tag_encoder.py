@@ -10,8 +10,10 @@ sys.path.append(os.path.abspath(pwd))
 sys.path.append(os.path.dirname(os.path.abspath(pwd)))
 try:
     from noiser.add_french_noise import read_rep, read_app
+    from noiser.noise import read_vocab
 except BaseException:
     from .noiser.add_french_noise import read_rep, read_app
+    from .noiser.noise import read_vocab
 
 separ = '￨'
 
@@ -134,9 +136,9 @@ class TagEncoder:
             error_type = "REPLACE"
         # logging.debug(error_type + "   :   " + tag)
         # DELETE, COPY, SWAP, SPLIT, HYPHEN, CASE, TRANSFORM, APPEND, REPLACE
-        if error_type in error_type_id:
-            return error_type_id[error_type]
-        return error_type_id["KEEP"]
+        if error_type in self.error_type_id:
+            return self.error_type_id[error_type]
+        return self.error_type_id["KEEP"]
 
     def size(self):
         return self._curr_cpt
@@ -166,7 +168,6 @@ class TagEncoder2(TagEncoder):
             "KEEP",  # .
             "DELETE",
             "SWAP",
-            "SPLIT",
             "MERGE",
             "HYPHEN:SPLIT",
             "HYPHEN:MERGE",
@@ -202,7 +203,7 @@ class TagEncoder2(TagEncoder):
             'r'
         ) as f:
             for line in f.readlines():
-                self.add_tag("$INFLECT:" + line)
+                self.add_tag("$INFLECT:" + line.rstrip('\n'))
 
         self.add_tag("$APPEND", word=True)
         self.add_tag("$REPLACE:INFLECTION", word=True)
@@ -229,13 +230,33 @@ class TagEncoder2(TagEncoder):
             self.worder.id_to_word[word]
         )
 
+    def tag_word_to_id(self, word_id, tag_id):
+        if tag_id >= self._curr_cpt - self._w_cpt:
+            return (
+                self._curr_cpt - self._w_cpt +
+                len(self.worder) * (self._curr_cpt - tag_id - 1) +
+                word_id
+            )
+        return tag_id
+
+    def tag_word_to_id_vec(self, word_id, tag_id):
+        ids = tag_id.clone()
+        mask = (tag_id >= self._curr_cpt - self._w_cpt)
+        ids[mask] = (
+            self._curr_cpt - self._w_cpt +
+            len(self.worder) * (self._curr_cpt - tag_id[mask] - 1) +
+            word_id[mask]
+        )
+        return ids
+
     def tag_to_id(self, tag):
         if self.is_word_tag(tag):
             tags = tag.split('_')
-            word = tags[-1]
+            word = tags[-1].rstrip('\n')
+            # logging.info(" >> " + str(word) + '|')
             word = self.worder.word_to_id[word]
-            # logging.info(tag)
             tag = '_'.join(tags[:-1])
+            # logging.info(str(word))
             cls = self._tag_to_id[tag]
             cls = self._curr_cpt - cls - 1
             #
@@ -243,7 +264,7 @@ class TagEncoder2(TagEncoder):
             # logging.info(" ".join([str(type(self._curr_cpt)), str(type(self._w_cpt)), str(type(len(self.worder))), str(type(cls)), str(type(word))]))
             return self._curr_cpt - self._w_cpt + len(self.worder) * cls + word
 
-        return self._tag_to_id[tag[1:]]
+        return self._tag_to_id[tag]
 
     def id_to_tag_id(self, i):
         if i < self.size() - self._w_cpt:
@@ -295,6 +316,12 @@ class TagEncoder2(TagEncoder):
         #         )
         return '_' in tag
 
+    def is_radical_word_tag(self, tag):
+        return (tag.startswith("$APPEND")
+                or tag.startswith("$REPLACE")
+                or (tag == "$SPLIT")
+                )
+
     def id_to_type_id(self, tid):
         tag = self.id_to_tag(tid)
         if self.is_word_tag(tag):
@@ -309,6 +336,7 @@ class TagEncoder2(TagEncoder):
 
     def get_tag_category(self, tag):
         if isinstance(tag, int):
+            # logging.info("int tag id  :::: " + str(tag))
             tag = self.id_to_tag(tag)
         if self.is_word_tag(tag):
             error_type = tag[1:].split('_')[0]
@@ -318,6 +346,12 @@ class TagEncoder2(TagEncoder):
         if tag[1:] in self.error_type_id:
             return self.error_type_id[tag[1:]]
         return self.error_type_id["KEEP"]
+
+    def get_tag_category_pure(self, tag):
+        cat = self.get_tag_category(tag)
+        # TODO ?
+        return cat
+
 
     def get_num_encodable(self):
         return self.size() + self._w_cpt * (len(self.worder) - 1)
@@ -329,11 +363,11 @@ class WordEncoder:
         self,
         path_to_voc="/nfs/RESEARCH/bouthors/projects/gramerco/resources/common/french.dic.20k",
     ):
-        voc = read_app(path_to_voc)
+        voc = read_vocab(path_to_voc)
         self.id_to_word = defaultdict(default_keep_id)
         self.word_to_id = defaultdict(default_empty)
         self._curr_cpt = 0
-        for word in voc:
+        for i, word in enumerate(voc):
             self.add_word(word)
 
     def add_word(self, word):
@@ -355,45 +389,63 @@ if __name__ == "__main__":
     from noiser.Noise import Lexicon
     lexicon = Lexicon("../resources/Lexique383.tsv")
 
-    for i in range(300):
-        tag = tagger.id_to_tag(i)
+    txt = """$HYPHEN:SPLIT $HYPHEN:MERGE $DELETE $APPEND_le"""
+
+    for l in txt.split('\n'):
+        ids = tagger.encode_line(l)
+        voc = tagger.id_to_word_id_vec(ids)
+        tag = tagger.id_to_tag_id_vec(ids)
+
+        print(ids)
+        print(tag)
+        print(voc)
+
+
+    # for i in range(0, 90000, 100):
+    #     tag = tagger.id_to_tag(i)
         # print(i, tag)
         # tagger.tag_to_id(tag)
         # tagger.id_to_tag_id(i)
         # tagger.id_to_word_id(i)
-        print(
-            i,
-            tag,
-            tagger.tag_to_id(tag),
-            '\t\t\t',
-            tagger.id_to_tag_id(i),
-            tagger.id_to_word_id(i))
+        # print(
+        #     i,
+        #     tag,
+        #     tagger.tag_to_id(tag),
+        #     '\t\t\t',
+        #     tagger.id_to_tag_id(i),
+        #     tagger.id_to_word_id(i),
+        #     '\t\t',
+        #     tagger.get_tag_category(i)
+        # )
+        # print(
+        #     tag, '\t', tagger.id_error_type[tagger.get_tag_category(i)]
+        # )
 
-    for i in range(300, 20000 * 5, 5000):
-        tag = tagger.id_to_tag(i)
-        # print(i, tag)
-        # tagger.tag_to_id(tag)
-        # tagger.id_to_tag_id(i)
-        # tagger.id_to_word_id(i)
-        print(
-            i,
-            tag,
-            tagger.tag_to_id(tag),
-            '\t\t\t',
-            tagger.id_to_tag_id(i),
-            tagger.id_to_word_id(i))
-    i = 3000
-    print(i, tagger.id_to_tag(i))
-    print(tagger.size())
-    print(tagger.worder.size())
-    print(tagger.error_type_id)
-
-    print(tagger.is_word_tag("$REPLACE:SPELL_ainsi"))
-    print(tagger.is_word_tag(
-        "$INFLECT:VERB;Mood=Ind;Number=Plur;Person=1;Tense=Pres;VerbForm=Fin"))
-    print("$REPLACE:SPELL_ainsi", tagger.tag_to_id("$REPLACE:SPELL_ainsi"))
-
-    print(tagger.worder.word_to_id["prestement"])
-    print(tagger.worder.id_to_word[1662])
-
-    tagger.get_tag_category("$REPLACE:SPELL_ainsi")
+    # for i in range(300, 20000 * 5, 5000):
+    #     tag = tagger.id_to_tag(i)
+    #     # print(i, tag)
+    #     # tagger.tag_to_id(tag)
+    #     # tagger.id_to_tag_id(i)
+    #     # tagger.id_to_word_id(i)
+    #     print(
+    #         i,
+    #         tag,
+    #         tagger.tag_to_id(tag),
+    #         '\t\t\t',
+    #         tagger.id_to_tag_id(i),
+    #         tagger.id_to_word_id(i))
+    # i = 3000
+    # print(i, tagger.id_to_tag(i))
+    # print(tagger.size())
+    # print(tagger.worder.size())
+    # print(tagger.error_type_id)
+    #
+    # print(tagger.is_word_tag("$REPLACE:SPELL_ainsi"))
+    # print(tagger.is_word_tag(
+    #     "$INFLECT:VERB;Mood=Ind;Number=Plur;Person=1;Tense=Pres;VerbForm=Fin"))
+    # print("$REPLACE:SPELL_ainsi", tagger.tag_to_id("$REPLACE:SPELL_ainsi"))
+    #
+    # print(tagger.worder.word_to_id["prestement"])
+    # print(tagger.worder.id_to_word[1662])
+    #
+    # tagger.get_tag_category("$REPLACE:SPELL_ainsi")

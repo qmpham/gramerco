@@ -413,7 +413,7 @@ def noise_line(toks,txt2inf,vocab,wrd2wrds_same_lemma,wrd2wrds_homophones,lempos
             n_changes += do_case_upper(toks, tags, vocab, seen, args)
 
 def read_vocab(f):
-    vocab = set()
+    vocab = list()
     if not f:
         return vocab
     with open(f,'r') as fd:
@@ -423,7 +423,7 @@ def read_vocab(f):
             l = l.rstrip()
             if len(l) == 0:
                 continue
-            vocab.add(l)
+            vocab.append(l)
     return vocab
 
 def read_lexicon(f, vocab):

@@ -114,7 +114,7 @@ def train(args, device):
     tokenizer = FlaubertTokenizer.from_pretrained(args.tokenizer)
     tagger = TagEncoder2(
         path_to_lex=args.path_to_lex,
-        path_to_app=args.path_to_voc
+        path_to_voc=args.path_to_voc
     )
 
     if args.continue_from and args.continue_from != "none":
@@ -322,6 +322,7 @@ def train(args, device):
                         TP = 0
                         FN = 0
                         FP = 0
+                        TN = 0
                         accs = np.zeros(len(tagger.id_error_type))
                         lens = np.zeros(len(tagger.id_error_type))
                         for valid_batch in tqdm(valid_iter.next_epoch_itr()):
@@ -339,38 +340,49 @@ def train(args, device):
                             #
                             # out = out["tag_out"]
 
-                            tgt = valid_batch["tag_data"]["input_ids"]
+                            ref_ids = valid_batch["tag_data"]["input_ids"]
                             tgt_mask = valid_batch["tag_data"]["attention_mask"]
-                            tgt_tag = tagger.id_to_tag_id_vec(tgt)
-                            tgt_voc = tagger.id_to_word_id_vec(tgt)
-                            # ref_dec = tgt[coincide_mask][tgt_mask[coincide_mask].bool()].bool()
-                            # pred_dec = out["decision_out"][coincide_mask][
-                            #         out["attention_mask"][coincide_mask].bool()
-                            #     ].argmax(-1).bool()
+                            tgt_tag = tagger.id_to_tag_id_vec(ref_ids)
+                            tgt_voc = tagger.id_to_word_id_vec(ref_ids)
+
                             ref_tag = tgt_tag[coincide_mask][tgt_mask[coincide_mask].bool()]
                             pred_tag = out["tag_out"][coincide_mask][
                                     out["attention_mask"][coincide_mask].bool()
-                                ].argmax(-1)
-                            # TP += ((pred_dec == ref_dec) &
-                            #        ref_dec).long().sum().item()
-                            # # TN += ((pred == ref) & ~ref).long().sum().item()
-                            # FN += ((pred_dec != ref_dec) &
-                            #        ref_dec).long().sum().item()
-                            # FP += ((pred_dec != ref_dec) & ~
-                            #        ref_dec).long().sum().item()
+                            ].argmax(-1)
+                            pred_voc = out["voc_out"][coincide_mask][
+                                    out["attention_mask"][coincide_mask].bool()
+                            ].argmax(-1)
+                            pred_ids = tagger.tag_word_to_id_vec(pred_voc, pred_tag)
 
-                            pred_types = pred_tag.clone().cpu().apply_(
-                                tagger.get_tag_category).long()
-                            ref_types = ref_tag.clone().cpu().apply_(
-                                tagger.get_tag_category).long()
+
+                            ref_dec = ref_tag.ne(0)
+                            pred_dec = pred_tag.ne(0)
+                            TP += ((pred_dec == ref_dec) &
+                                   ref_dec).long().sum().item()
+                            TN += (
+                                (pred_dec == ref_dec) & ~ref_dec
+                            ).long().sum().item()
+                            FN += ((pred_dec != ref_dec) &
+                                   ref_dec).long().sum().item()
+                            FP += ((pred_dec != ref_dec) & ~
+                                   ref_dec).long().sum().item()
+
+                            pred_types = pred_ids.clone().cpu().apply_(
+                                tagger.get_tag_category
+                            ).long()
+                            ref_types = ref_ids.clone().cpu().apply_(
+                                tagger.get_tag_category
+                            ).long()
                             for err_id in range(len(tagger.id_error_type)):
                                 pred_types_i = pred_types[ref_types == err_id]
                                 ref_types_i = ref_types[ref_types == err_id]
-                                accs[err_id] += (pred_types_i == ref_types_i).long().sum().item()
+                                accs[err_id] += (
+                                    pred_types_i == ref_types_i
+                                ).long().sum().item()
                                 lens[err_id] += len(ref_types_i)
 
                             val_loss = criterion(
-                                out, tgt, coincide_mask, valid_batch, tagger,
+                                out, ref_ids, coincide_mask, valid_batch, tagger,
                             ).item()
                             val_losses.append(val_loss)
                         del valid_batch
@@ -381,11 +393,11 @@ def train(args, device):
                             num_iter,
                         )
 
-                        # recall = TP / (TP + FN)
-                        # precision = TP / (TP + FP)
+                        recall = TP / (TP + FN)
+                        precision = TP / (TP + FP)
 
-                        # F2_score = 5 * recall * precision / \
-                        #     (4 * precision + recall)
+                        F2_score = 5 * recall * precision / \
+                            (4 * precision + recall)
                         for err_id in range(len(tagger.id_error_type)):
                             writer.add_scalar(
                                 "ErrorType/{}".format(tagger.id_error_type[err_id]),
@@ -393,21 +405,21 @@ def train(args, device):
                                 num_iter,
                             )
 
-                        # writer.add_scalar(
-                        #     os.path.join("Error/detection_rate"),
-                        #     recall,
-                        #     num_iter,
-                        # )
-                        # writer.add_scalar(
-                        #     os.path.join("Error/precision"),
-                        #     precision,
-                        #     num_iter,
-                        # )
-                        # writer.add_scalar(
-                        #     os.path.join("Error/F2_score"),
-                        #     F2_score,
-                        #     num_iter,
-                        # )
+                        writer.add_scalar(
+                            os.path.join("Error/detection_rate"),
+                            recall,
+                            num_iter,
+                        )
+                        writer.add_scalar(
+                            os.path.join("Error/precision"),
+                            precision,
+                            num_iter,
+                        )
+                        writer.add_scalar(
+                            os.path.join("Error/F2_score"),
+                            F2_score,
+                            num_iter,
+                        )
 
                         stopper(val_loss)
 

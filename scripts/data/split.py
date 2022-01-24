@@ -8,8 +8,9 @@ from tqdm import tqdm
 BUFFER_SIZE = 10 ** 9
 
 
-def partition(length: int, dev_size: float, test_size: float):
+def partition(length: int, dev_size: float, test_size: float, train_size: float):
     assert dev_size + test_size < 1.0
+
     idxs = np.arange(length)
     np.random.seed(0)
     np.random.shuffle(idxs)
@@ -20,6 +21,9 @@ def partition(length: int, dev_size: float, test_size: float):
     chooser = np.zeros(length, dtype=np.int8)
     chooser[idxs[:idx_1]] = 2
     chooser[idxs[idx_1:idx_2]] = 1
+
+    if train_size > 0:
+        idx = int(train_size * length)
 
     return chooser
 
@@ -82,8 +86,9 @@ if __name__ == "__main__":
         default="info",
         help="Logging level [debug, info, warning, critical, error] (info)",
     )
-    parser.add_argument("-dev", default=0.1, type=int, help="dev data proportion")
-    parser.add_argument("-test", default=0.1, type=int, help="test data proportion")
+    parser.add_argument("-dev", default=0.01, type=float, help="dev data proportion")
+    parser.add_argument("-test", default=0.01, type=float, help="test data proportion")
+    parser.add_argument("-train", default=-1, type=float, help="train data proportion")
 
     args = parser.parse_args()
     create_logger("stderr", args.log)
@@ -93,7 +98,12 @@ if __name__ == "__main__":
     # length = len(f.readlines())
     length = sum(1 for line in f)
     f.close()
-    chooser = partition(length, dev_size=args.dev, test_size=args.test)
+    chooser = partition(
+        length,
+        dev_size=args.dev,
+        test_size=args.test,
+        train_size=args.train
+    )
     logging.info("partitionning over")
 
     write_partition(args.file, ".fr", chooser)

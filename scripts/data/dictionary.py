@@ -23,7 +23,7 @@ class Dictionary:
         self.encoder = encoder
         self.encoder_type = encoder_type
         self.version = version
-        if version:
+        if version == 1:
             self.dic_itt = (
                 encoder._id_to_tag if encoder_type == "tag_encoder" else encoder.encoder
             )
