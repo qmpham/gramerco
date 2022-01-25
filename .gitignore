@@ -1,0 +1,7 @@
+resources
+scripts/data/__pycache__/
+scripts/model-GECToR/__pycache__/
+noiser/__pycache__/
+*.pyc
+*/__pycache__/*
+*/scrap.py

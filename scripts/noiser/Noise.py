@@ -32,6 +32,9 @@ class Spacy():
             toks.append(Tok(txt,lem=lem,pos=pos,inf=inf))
         return toks
 
+    def compose(self, toks):
+        return ' '.join([t.txt+separ+t.pos for t in toks])
+
 class Lexicon():
     def __init__(self,f):
         self.mot2linf = defaultdict(set)
@@ -77,7 +80,7 @@ class Noise():
 
 
     def noise(self,t):
-        if self.args.adj and t.pos == 'ADJ' or self.args.nom and t.pos == 'NOUN' or self.args.ver and (t.pos == 'VERB' or t.pos == 'AUX'):
+        if t.pos == 'ADJ' or t.pos == 'NOUN' or t.pos == 'VERB' or t.pos == 'AUX':
             logging.debug('000 {} {} {} {}'.format(t.txt,t.lem,t.pos,t.inf))
             txt_truecase = t.txt
             t.txt = t.txt.lower() ### all text tokens appear lowercased in Lexicon
@@ -145,10 +148,8 @@ class Noise():
 
         linf = []    
         for inf in self.l.mot2linf[t.txt]:
-            logging.debug(inf)
             if inf.split(separ)[0] == pos:
                 linf.append(inf)
-                logging.debug('ok')
         return linf
 
     def get_lexicon_tag(self, t, linf): 

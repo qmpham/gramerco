@@ -25,9 +25,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('lex', help='Path of Lexique383.tsv')
     parser.add_argument('files', help="Input file/s", nargs='+')
-    parser.add_argument('-adj', action='store_true', help="Noise ADJs")
-    parser.add_argument('-nom', action='store_true', help="Noise NOUNs")
-    parser.add_argument('-ver', action='store_true', help="Noise VERBs")
     parser.add_argument('-log', default='info', help="Logging level [debug, info, warning, critical, error] (info)")
     args = parser.parse_args()
     create_logger('stderr',args.log)
@@ -43,6 +40,7 @@ if __name__ == '__main__':
         for l in tqdm(lines):
             logging.debug('--- {}'.format(l))
             toks = s.analyze(l)
+            logging.debug(s.compose(toks))
             out = [l]
             for t in toks:
                 txt_other, tag_curr = n.noise(t)
@@ -53,6 +51,3 @@ if __name__ == '__main__':
             ntoks += len(toks)
         logging.info('Found {} sentences with {} tokens'.format(nsents,ntoks))
         n.stats()
-        
-        
-        
