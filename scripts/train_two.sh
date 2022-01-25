@@ -17,7 +17,7 @@ python train_two.py $DATA_BIN/$DATA_NAME \
       --log DEBUG \
       --model-id freeze20k+ls0.2+cumul4+rdm0.5 \
       --save $SAVE_PATH \
-      --continue-from none \
+      --continue-from last \
       --lex $DATA_DIR/Lexique383.tsv \
       --voc $DATA_DIR/common/french.dic.20k \
       --tokenizer flaubert/flaubert_base_cased \

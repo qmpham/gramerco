@@ -103,8 +103,9 @@ def apply_tags(
             i += 1
         elif tag.startswith("$REPLACE"):
             new_toks.append(tag.split('_')[-1])
-        elif tag.startswith("$INFLECT_"):
-            new_toks.append(g_transform(toks[i], tag.split('_')[-1], lexicon))
+        elif tag.startswith("$INFLECT:"):
+            # new_toks.append(g_transform(toks[i], tag.split('_')[-1], lexicon))
+            new_toks.append(toks[i]+"_inflected")
         elif tag.startswith("$SPLIT"):
             w = tag.split('_')[-1]
             if toks[i].startswith(w):

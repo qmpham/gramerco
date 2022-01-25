@@ -125,7 +125,7 @@ def test(args):
     pred_tags_tot = list()
     ref_tags_tot = list()
     ids_ref_tot = list()
-    tag_word_cpts = np.zeros(tagger._w_cpt, 2)
+    tag_word_cpts = np.zeros((tagger._w_cpt, 2))
     uu = 0
     if args.raw:
         for i in tqdm(range(len(txt_src) // args.batch_size + 1)):
@@ -306,12 +306,19 @@ def test(args):
                     lens[err_id] += len(pred_types_i)
 
                 for word_tag_id in range(tagger._w_cpt):
-                    tid = word_tag_id + tagger._current_cpt - tagger._w_cpt
+                    tid = word_tag_id + tagger._curr_cpt - tagger._w_cpt
+                    # logging.info(str(type(tag_ids)))
+                    # logging.info(str(type(ref_tag_ids)))
+                    # logging.info(str(type(ref_tag_ids == tid)))
+                    # logging.info(str(type(tag_ids[ref_tag_ids == tid] == tid)))
+                    # logging.info(str((
+                    #     tag_ids[ref_tag_ids == tid] == tid
+                    # ).long().sum().item()))
                     tag_word_cpts[word_tag_id, 0] += (
-                        pred_tags[ref_tags == tid] == tid
+                        tag_ids[ref_tag_ids == tid] == tid
                     ).long().sum().item()
                     tag_word_cpts[word_tag_id, 1] += (
-                        ref_tags == tid
+                        ref_tag_ids == tid
                     ).long().sum().item()
 
     # pts = np.array([len(pt) for pt in pred_tags])
@@ -323,7 +330,7 @@ def test(args):
     ref_tags_tot = torch.cat(ref_tags_tot).cpu()
     pred_tags_tot = torch.cat(pred_tags_tot).cpu()
     ids_ref_tot = torch.cat(ids_ref_tot).cpu()
-    
+
     pred_tags_ = torch.cat((
         pred_tags,
         torch.arange(len(tagger.id_error_type)),
@@ -345,6 +352,12 @@ def test(args):
     logging.info("global acc  = " + str((num_true[num_tot != 0].sum() / num_tot[num_tot != 0].sum())))
     logging.info("class accurate  = " + str(num_true))
     logging.info("class total  = " + str(num_tot))
+
+    for i in range(tagger._w_cpt):
+        logging.info(
+            tagger.id_error_type[-i - 1] + " word acc = " +
+            str(tag_word_cpts[i, 0] / tag_word_cpts[i, 1])
+        )
 
     # pred_error_types = (pred_tags[ref_tags.ne(0)] +
     #                     1).apply_(tagger.get_tag_category).long()

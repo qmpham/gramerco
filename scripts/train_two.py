@@ -117,11 +117,8 @@ def train(args, device):
         path_to_voc=args.path_to_voc
     )
 
-    if args.continue_from and args.continue_from != "none":
-        model_id = args.continue_from
-    else:
-        model_id = args.model_id if args.model_id else str(int(time.time()))
-        model_id = model_id + "-" + args.model_type
+    model_id = args.model_id if args.model_id else str(int(time.time()))
+    model_id = model_id + "-" + args.model_type
 
     model = GecBertVocModel(
         len(tagger),
@@ -143,21 +140,23 @@ def train(args, device):
     if args.continue_from and args.continue_from != "none" and os.path.isfile(
         os.path.join(
             args.save,
-            args.continue_from,
-            "model_last.pt"
+            model.id,
+            "model_{}.pt".format(args.continue_from)
         )
     ):
         logging.info(
             "continue from " +
             os.path.join(
                 args.save,
-                args.continue_from,
-                "model_last.pt"))
+                model.id,
+                "model_{}.pt".format(args.continue_from)
+            )
+        )
         model_info = torch.load(
             os.path.join(
                 args.save,
-                args.continue_from,
-                "model_last.pt"
+                model.id,
+                "model_{}.pt".format(args.continue_from)
             )
         )
         logging.info("starting from iteration {}".format(model_info["num_iter"]))
@@ -323,6 +322,7 @@ def train(args, device):
                         FN = 0
                         FP = 0
                         TN = 0
+                        tag_word_cpts = np.zeros((tagger._w_cpt, 2))
                         accs = np.zeros(len(tagger.id_error_type))
                         lens = np.zeros(len(tagger.id_error_type))
                         for valid_batch in tqdm(valid_iter.next_epoch_itr()):
@@ -337,15 +337,15 @@ def train(args, device):
                             sizes_tgt = valid_batch["tag_data"]["attention_mask"].sum(-1)
                             coincide_mask = sizes_out == sizes_tgt
 
-                            #
                             # out = out["tag_out"]
+                            tgt_mask = valid_batch["tag_data"]["attention_mask"][
+                                coincide_mask]
+                            tgt_ids = valid_batch["tag_data"]["input_ids"]
+                            ref_ids = tgt_ids[coincide_mask][tgt_mask.bool()]
 
-                            ref_ids = valid_batch["tag_data"]["input_ids"]
-                            tgt_mask = valid_batch["tag_data"]["attention_mask"]
-                            tgt_tag = tagger.id_to_tag_id_vec(ref_ids)
-                            tgt_voc = tagger.id_to_word_id_vec(ref_ids)
+                            ref_tag = tagger.id_to_tag_id_vec(ref_ids)
+                            ref_voc = tagger.id_to_word_id_vec(ref_ids)
 
-                            ref_tag = tgt_tag[coincide_mask][tgt_mask[coincide_mask].bool()]
                             pred_tag = out["tag_out"][coincide_mask][
                                     out["attention_mask"][coincide_mask].bool()
                             ].argmax(-1)
@@ -375,14 +375,22 @@ def train(args, device):
                             ).long()
                             for err_id in range(len(tagger.id_error_type)):
                                 pred_types_i = pred_types[ref_types == err_id]
-                                ref_types_i = ref_types[ref_types == err_id]
                                 accs[err_id] += (
-                                    pred_types_i == ref_types_i
+                                    pred_types_i == err_id
                                 ).long().sum().item()
-                                lens[err_id] += len(ref_types_i)
+                                lens[err_id] += len(pred_types_i)
+
+                            for word_tag_id in range(tagger._w_cpt):
+                                tid = word_tag_id + tagger._curr_cpt - tagger._w_cpt
+                                tag_word_cpts[word_tag_id, 0] += (
+                                    pred_tag[ref_tag == tid] == tid
+                                ).long().sum().item()
+                                tag_word_cpts[word_tag_id, 1] += (
+                                    ref_tag == tid
+                                ).long().sum().item()
 
                             val_loss = criterion(
-                                out, ref_ids, coincide_mask, valid_batch, tagger,
+                                out, tgt_ids, coincide_mask, valid_batch, tagger,
                             ).item()
                             val_losses.append(val_loss)
                         del valid_batch
@@ -404,6 +412,13 @@ def train(args, device):
                                 (accs[err_id] + 1) / (lens[err_id] + 1),
                                 num_iter,
                             )
+
+                        for i in range(tagger._w_cpt):
+                            if tag_word_cpts[i, 1] > 0:
+                                writer.add_scalar(
+                                    "WordError/{}".format(tagger.id_error_type[-i - 1]),
+                                    tag_word_cpts[i, 0] / tag_word_cpts[i, 1]
+                                )
 
                         writer.add_scalar(
                             os.path.join("Error/detection_rate"),

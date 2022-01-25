@@ -12,8 +12,8 @@ DATA_BIN=$DATA_DIR/$DATA_NAME/$DATA_NAME-bin-2
 # DATA_SRC=$DATA_DIR/dictates/test-dictates/dicts.err
 # OUT_TAGS=$DATA_DIR/dictates/generated-dictates/dicts.tags
 
-DATA_SRC=/nfs/RESEARCH/crego/projects/gramerco/kk.src
-OUT_TAGS=$DATA_DIR/evals/kk.tags
+DATA_SRC=/nfs/RESEARCH/crego/projects/gramerco/data/valid-test-sets/HEADLINES_2018_8_fr.txt
+OUT_TAGS=/nfs/RESEARCH/bouthors/projects/gramerco/resources/evals/io.tags
 
 SAVE_PATH=$DATA_DIR/models/gramerco-two-fr
 mkdir -p $SAVE_PATH
@@ -22,10 +22,11 @@ mkdir -p $SAVE_PATH/tensorboard
 CUDA_VISIBLE_DEVICES=0,1 \
 CUDA_LAUNCH_BLOCKING=1 \
 python infer_two.py \
+      --text "Je dans mon bendo" \
       --file $DATA_SRC \
       --log DEBUG \
       --save $SAVE_PATH \
-      --model-id freeze30k+ls0.2+cumul4+rdm0.5-normal1 \
+      --model-id freeze20k+ls0.2+cumul4+rdm0.5-normal1 \
       --lex $DATA_DIR/Lexique383.tsv \
       --voc $DATA_DIR/common/french.dic.20k \
       --tokenizer flaubert/flaubert_base_cased \
