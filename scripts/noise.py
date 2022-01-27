@@ -134,7 +134,7 @@ def do_replace_spell(toks, tags, vocab, seen, args):
             continue
         if len(toks[idx]) < 2:
             continue
-        if toks[idx] not in vocab:
+        if  noi toks[idx] in vocab:
             continue
         new_txt = misspell(toks[idx])
         if new_txt == toks[idx]:
@@ -155,8 +155,10 @@ def do_append(toks, tags, wrd2pos, vocab, seen, args):
             continue
         if not toks[idx+1] in vocab:
             continue
+        if not toks[idx+1] in wrd2pos:
+            continue
         pos = wrd2pos[toks[idx+1]] ###is a set
-        if 'ADJ' in pos or 'NOM' in pos or 'VERB' in pos: ### do not append ADJ, NOM, VERB
+        if 'ADJ' in pos or 'NOM' in pos or 'VERB' in pos or 'ADV' in pos or 'AUX' in pos or 'ONO' in pos: ### do not append VERB NOM ADV ADJ AUX ONO
             continue
         #print("{} {}".format(toks[idx+1], [x for x in pos]))
         tags[idx] = '$APPEND_' + toks[idx+1]
