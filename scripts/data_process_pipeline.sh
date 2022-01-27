@@ -32,15 +32,19 @@ mkdir -p $DATA_BIN
 
 ### v2
 
-#ls ../resources/AFP/AFP-raw/*.txt | \
-#	parallel -j 32 "python3 noiser/noise.py --vocab ../resources/common/french.dic.20k --lexicon ../resources/Lexique383.tsv --p_clean 0 {} > ../resources/AFP/AFP-lex-2/{/.}.noise 2> {}.log" &> log.parallel
+ls $DATA_RAW/*.txt | \
+	parallel -j 32 "python3 noiser/noise.py --vocab ../resources/common/french.dic.20k --lexicon ../resources/Lexique383.tsv --p_clean 0 {} > ../resources/AFP/AFP-lex-2/{/.}.noise 2> {}.log" &> log.parallel
 
 
-#echo "combining now"
+echo "combining now"
 
-#cat $DATA_LEX/*.noise > $DATA_LEX/$DATA_NAME.noise
+cat $DATA_LEX/*.noise > $DATA_LEX/$DATA_NAME.all.noise
 
-#python data/generate_dataset.py $DATA_LEX/$DATA_NAME.noise -to $DATA_NOISE/$DATA_NAME
+echo "Extracting subset of sentences"
+
+head -n 50000000 $DATA_LEX/$DATA_NAME.all.noise > $DATA_LEX/$DATA_NAME.noise
+
+python data/generate_dataset.py $DATA_LEX/$DATA_NAME.noise -to $DATA_NOISE/$DATA_NAME
 
 echo "splitting"
 
