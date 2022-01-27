@@ -70,8 +70,8 @@ if __name__ == "__main__":
 
     torch.manual_seed(0)
 
-    r = torch.rand(30).view(3, -1)
-    x = torch.arange(60).float().view(3, 10, -1)
+    r = torch.rand(30).view(3, -1).cuda()
+    x = torch.arange(60).float().view(3, 10, -1).cuda()
     word_index = r.cumsum(-1).long()
     print(word_index)
     print(x)

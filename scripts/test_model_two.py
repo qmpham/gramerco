@@ -370,6 +370,7 @@ def test(args):
         cmap="coolwarm",
         display_labels=tagger.id_error_type,
     )
+    plt.xticks(rotation=90)
     plt.savefig(os.path.join(
         args.save_path,
         args.model_id,
@@ -382,6 +383,7 @@ def test(args):
         cmap="coolwarm",
         display_labels=tagger.id_error_type[1:],
     )
+    plt.xticks(rotation=90)
     plt.savefig(os.path.join(
         args.save_path,
         args.model_id,

@@ -12,113 +12,368 @@ from tokenizer import WordTokenizer
 import logging
 import matplotlib.pyplot as plt
 from noiser.Noise import Lexicon
+from collections import defaultdict
 import os
 import sys
 import re
+import difflib
+import Levenshtein
+import math
 
 
 separ = '￨'
 
 
-def g_transform(tok, tag, lexicon):
-    if tok in lexicon.mot2linf:
-        if tok in lexicon.mot2llempos:
-            lems = lexicon.mot2llempos[tok]
-            for lem in lems:
-                lem = lem.split(separ)[0]
-                if lem in lexicon.lem2lmot:
-                    mots = lexicon.lem2lmot[lem]
-                    for mot in mots:
-                        if tag in lexicon.mot2linf[mot]:
-                            return mot
-    return tok
+MOOD_MAP = {
+    "ind": "Ind",
+    "imp": "Imp",
+    "cnd": "Cnd",
+    "sub": "Sub",
+}
+
+TENSE_MAP = {
+    "pre": "Pres",
+    "pas": "Past",
+    "fut": "Fut",
+    "imp": "Imp",
+}
+
+NBR_MAP = {
+    "s": "Sing",
+    "p": "Plur",
+}
 
 
-def apply_tags(
-        sentence: str,
-        tags,
-        tokenizer: WordTokenizer,
-        tagger: TagEncoder2,
-        lexicon: Lexicon,
-        args,
+def read_lexicon(f, vocab):
+    lem2wrd = defaultdict(set)
+    wrd2lem = defaultdict(set)
+    pho2wrd = defaultdict(set)
+    wrd2pho = defaultdict(set)
+    wrd2wrds_same_lemma = defaultdict(set)
+    wrd2wrds_homophones = defaultdict(set)
+    lempos2wrds = defaultdict(set)
+    lempos2wrdsinf = defaultdict(set)
+    lemposinf2wrd = defaultdict(set)
+    if not f:
+        return wrd2wrds_same_lemma, wrd2wrds_homophones, lempos2wrds
+
+    with open(f, 'r') as fd:
+        for l in fd:
+            toks = l.rstrip().split('\t')
+            if len(toks) < 3:
+                continue
+            wrd, pho, lem, pos, gender, nbre, conj = toks[0], toks[1], toks[2], toks[3], toks[4], toks[5], toks[10]
+            in_vocab = wrd in vocab
+            # if wrd not in vocab:
+            #     continue
+            if ' ' in wrd or ' ' in lem or ' ' in pho or ' ' in pos:
+                continue
+
+            if pos == "VER":
+                pos = "VERB"  # use same tag as SpaCy
+            elif pos.startswith("ADJ"):
+                pos = "ADJ"
+            elif pos.startswith("PRO"):
+                pos = "PRON"
+            elif pos == "NOM":
+                pos = "NOUN"
+            elif pos == "PRE":
+                pos = "ADP"
+            if in_vocab:
+                lem2wrd[lem].add(wrd)
+            wrd2lem[wrd].add(lem)
+            if in_vocab:
+                pho2wrd[pho].add(wrd)
+            wrd2pho[wrd].add(pho)
+            if in_vocab:
+                lempos2wrds[lem + separ + pos].add(wrd)
+            lempos2wrdsinf[lem + separ + pos].add((gender, nbre, conj))
+            lemposinf2wrd[separ.join([lem, pos, gender, nbre, conj])].add(wrd)
+
+    for wrd in wrd2lem:
+        for lem in wrd2lem[wrd]:
+            for w in lem2wrd[lem]:
+                if w == wrd:
+                    continue
+                wrd2wrds_same_lemma[wrd].add(w)
+
+    for wrd in wrd2pho:
+        for pho in wrd2pho[wrd]:
+            for w in pho2wrd[pho]:
+                if w == wrd:
+                    continue
+                wrd2wrds_homophones[wrd].add(w)
+
+    return {
+        "common_lemma": wrd2wrds_same_lemma,
+        "wrd2lem": wrd2lem,
+        "homophones": wrd2wrds_homophones,
+        "words_from_lemma": lempos2wrds,
+        "lempos2wrdsinf": lempos2wrdsinf,
+        "lemposinf2wrd": lemposinf2wrd,
+    }
+
+
+def inflect_tag_to_dict(tag):
+    d = {e.split('=')[0]: e.split('=')[1] for e in tag.split(';')[1:]}
+    d["POS"] = tag.split(';')[0]
+    return d
+
+
+def get_idx_from_possibilities(tagger, possibilities):
+    ids = [
+        tagger.worder.word_to_id[word] for word in possibilities
+        if word in tagger.worder.word_to_id
+    ]
+    logging.info(str(ids))
+    return torch.tensor(ids, dtype=torch.int64)
+
+
+def get_homophone_idx(word, lex, tagger):
+    possibilities = lex["homophones"][word]
+    return get_idx_from_possibilities(tagger, possibilities)
+
+
+def get_spell_idx(word, tagger):
+    possibilities = [
+        candidate for candidate in tagger.worder.word_to_id.keys()
+        if difflib.SequenceMatcher(None, word, candidate).ratio() > 0.75
+    ]
+    # possibilities = [
+    #     candidate for candidate in tagger.worder.word_to_id.keys()
+    #     if Levenshtein.distance(word, candidate) <= (math.sqrt(len(word)) * 0.9)
+    # ]
+    #
+    # logging.info(str([
+    #     Levenshtein.distance(word, candidate) for candidate in possibilities
+    # ]))
+
+    logging.info(possibilities)
+    return get_idx_from_possibilities(tagger, possibilities)
+
+
+def get_inflection_idx(word, lex, tagger):
+    possibilities = lex["common_lemma"][word]
+    return get_idx_from_possibilities(tagger, possibilities)
+
+
+def get_prefix_idx(word, tagger):
+    possibilities = [
+        candidate for candidate in tagger.worder.word_to_id.keys()
+        if word.startswith(candidate)
+    ]
+    return get_idx_from_possibilities(tagger, possibilities)
+
+
+def get_inflection(word, inflection, lex, tagger):
+    inflection_spacy = inflect_tag_to_dict(inflection)
+    lems = lex["wrd2lem"][word]
+    logging.info("POS = " + inflection_spacy['POS'])
+    logging.info(str(lems))
+    for lem in lems:
+        possibilities = lex["lempos2wrdsinf"][
+            separ.join([
+                lem,
+                inflection_spacy['POS']
+            ])
+        ]
+        logging.info("possible = " + str(possibilities))
+        for gender, nbre, conj in possibilities:
+            gender_ = ''
+            nbre_ = ''
+            if gender:
+                if gender == "m":
+                    gender_ = "Masc"
+                elif gender == "f":
+                    gender_ = "Fem"
+                if not "Gender" in inflection_spacy:
+                    continue
+            if nbre:
+                nbre_ = NBR_MAP[nbre]
+                if not "Number" in inflection_spacy:
+                    continue
+            conjs = conj.split(';')[:-1]
+            for conj_ in conjs:
+                c = conj_.split(':')
+                if len(c) == 1:
+                    inf = {"VerbForm": "Inf"}
+                elif len(c) == 2:
+                    tense = TENSE_MAP[c[1]]
+                    inf = {"VerbForm": "Part", "Tense": tense}
+                elif len(c) == 3:
+                    mood = MOOD_MAP[c[0]]
+                    tense = TENSE_MAP[c[1]]
+                    pers = c[2][0]
+                    num = NBR_MAP[c[2][1]]
+                    inf = {
+                        "VerbForm": "Fin",
+                        "Tense": tense,
+                        "Mood": mood,
+                        "Number": num,
+                        "Person": pers,
+                    }
+                else:
+                    raise ValueError("conjugation value of {} invalid".format(c))
+
+                if nbre and not "Number" in inf:
+                    inf["Number"] = nbre_
+                if gender:
+                    inf["Gender"] = gender_
+
+                for key in inf:
+                    if (
+                        (key not in inflection_spacy)
+                        or (inf[key] != inflection_spacy[key])
+                    ):
+                        break
+                else:
+                    # Match found!
+                    return list(lex["lemposinf2wrd"][separ.join([
+                        lem,
+                        inflection_spacy['POS'],
+                        gender,
+                        nbre,
+                        conj,
+                    ])])[0]
+            # Not conjugation
+            if inflection_spacy['POS'] != "VERB":
+                # logging.info(gender)
+                # logging.info(str(inflection_spacy))
+                if (
+                    (gender == '' or
+                    gender_ == inflection_spacy["Gender"]) and
+                    (nbre == '' or
+                    nbre_ == inflection_spacy["Number"])
+                ):
+                    return list(lex["lemposinf2wrd"][separ.join([
+                        lem,
+                        inflection_spacy['POS'],
+                        gender,
+                        nbre,
+                        conj,
+                    ])])[0]
+
+
+def apply_tags_with_constraint(
+    sentence: str,
+    tag_proposals,
+    voc_out,
+    tokenizer: WordTokenizer,
+    tagger: TagEncoder2,
+    lex,
+    args
 ):
-
+    logging.info(sentence)
     toks = tokenizer.tokenize(sentence.rstrip('\n'), max_length=510)
-    # logging.info("-----------------------")
-    # logging.info(sentence)
-    # logging.info([tagger.id_to_tag(tag.item()) for tag in tags])
-    # logging.info(len(toks))
-    # logging.info(len(tags))
-
-    if len(toks) != len(tags):
+    logging.info(str(toks))
+    if len(toks) != tag_proposals.size(0):
         logging.debug(len(toks))
-        logging.debug(len(tags))
-        toks, tags = toks[:len(tags)], tags[:len(toks)]
-
-    if args.out_tags:
-        with open(args.out_tags, 'a') as f:
-            f.write(' '.join(['|'.join(e) for e in zip(toks, tags)]) + '\n')
-
-    assert len(toks) == len(tags)
+        logging.debug(tag_proposals.size(0))
+        toks, tag_proposals = (toks[:tag_proposals.size(0)],
+            tag_proposals[:len(toks)])
 
     new_toks = list()
     i = 0
     while i < len(toks):
-        tag = tags[i]
-        if tag == '·':  # keep
-            new_toks.append(toks[i])
-        elif "$APPEND_" in tag:
-            new_toks.append(toks[i])
-            new_toks.append(tag[8:])
-        elif tag == "$DELETE" or tag == "$COPY":
-            pass
-        elif tag == "$SWAP":
-            if i != len(toks) - 1:
-                new_toks.append(toks[i + 1])
-            new_toks.append(toks[i])
-            i = i + 1
-        elif tag == "$CASE:FIRST":
-            if toks[i][0].isupper():
-                new_toks.append(toks[i][0].lower() + toks[i][1:])
-            elif toks[i][0].islower():
-                new_toks.append(toks[i][0].upper() + toks[i][1:])
-        elif tag == "$CASE:UPPER":
-            new_toks.append(toks[i].upper())
-        elif tag == "$CASE:LOWER":
-            new_toks.append(toks[i].lower())
-        elif tag == "$HYPHEN:SPLIT":
-            for t in toks[i].split('-'):
-                new_toks.append(t)
-        elif tag == "$MERGE":
-            if i != len(toks) - 1:
-                new_toks.append(toks[i] + toks[i + 1])
+        can_move_on = False
+        j = 0
+        while not can_move_on:
+            tag = tagger._id_to_tag[tag_proposals[i, j].item()]
+            logging.info(str(i) + " HYPOTHESIS " + str(j) + " : " + tag)
+            # vocs = [tagger.worder.id_to_word[i.item()] for i in voc_ids]
+            if tag.startswith("$REPLACE"):
+                idx = None
+                if tag.startswith("$REPLACE:HOMOPHONE"):
+                    idx = get_homophone_idx(toks[i], lex, tagger)
+                elif tag.startswith("$REPLACE:SPELL"):
+                    idx = get_spell_idx(toks[i], tagger)
+                elif tag.startswith("$REPLACE:INFLECTION"):
+                    idx = get_inflection_idx(toks[i], lex, tagger)
+                if idx is not None and idx.any():
+                    # logging.info(str(idx.cpu().numpy()))
+                    can_move_on = True
+                    word = tagger.worder.id_to_word[
+                        idx[voc_out[i][idx].argmax(-1)].item()
+                    ]
+                    new_toks.append(word)
+            elif tag.startswith("$SPLIT"):
+                idx = get_prefix_idx(toks[i], tagger)
+                if idx is not None and idx.nelement():
+                    # logging.info(str(idx.cpu().numpy()))
+                    can_move_on = True
+                    word = tagger.worder.id_to_word[
+                        idx[voc_out[i][idx].argmax(-1)].item()
+                    ]
+                    assert toks[i].startswith(word)
+                    new_toks.append(word)
+                    new_toks.append(toks[i][len(word):])
+            elif tag.startswith("$INFLECT"):
+                inflection = tag.split(':')[-1]
+                inflection = get_inflection(toks[i], inflection, lex, tagger)
+                if inflection:
+                    can_move_on = True
+                    new_toks.append(inflection)
             else:
-                new_toks.append(toks[i])
-            i += 1
-        elif tag == "$HYPHEN:MERGE":
-            if i != len(toks) - 1:
-                new_toks.append(toks[i] + '-' + toks[i + 1])
-            else:
-                new_toks.append(toks[i])
-            i += 1
-        elif tag.startswith("$REPLACE"):
-            new_toks.append(tag.split('_')[-1])
-        elif tag.startswith("$INFLECT:"):
-            # new_toks.append(g_transform(toks[i], tag.split('_')[-1], lexicon))
-            new_toks.append(toks[i]+"_inflected")
-        elif tag.startswith("$SPLIT"):
-            w = tag.split('_')[-1]
-            if toks[i].startswith(w):
-                new_toks.append(w)
-                new_toks.append(toks[i][len(w):])
-            else:
-                new_toks.append(toks[i])
-        else:
-            raise ValueError("Tag not recognized :" + tag)
+                can_move_on = True
+                if tag == '·':  # keep
+                    new_toks.append(toks[i])
+                elif "$APPEND" in tag:
+                    new_toks.append(toks[i])
+                    new_toks.append(tagger.worder.id_to_word[
+                        voc_out[i].argmax(-1).item()
+                    ])
+                elif tag == "$DELETE" or tag == "$COPY":
+                    pass
+                elif tag == "$SWAP":
+                    if i != len(toks) - 1:
+                        new_toks.append(toks[i + 1])
+                    new_toks.append(toks[i])
+                    i = i + 1
+                elif tag == "$CASE:FIRST":
+                    if toks[i][0].isupper():
+                        new_toks.append(toks[i][0].lower() + toks[i][1:])
+                    elif toks[i][0].islower():
+                        new_toks.append(toks[i][0].upper() + toks[i][1:])
+                elif tag == "$CASE:UPPER":
+                    new_toks.append(toks[i].upper())
+                elif tag == "$CASE:LOWER":
+                    new_toks.append(toks[i].lower())
+                elif tag == "$HYPHEN:SPLIT":
+                    for t in toks[i].split('-'):
+                        new_toks.append(t)
+                elif tag == "$MERGE":
+                    if i != len(toks) - 1:
+                        new_toks.append(toks[i] + toks[i + 1])
+                    else:
+                        new_toks.append(toks[i])
+                    i += 1
+                elif tag == "$HYPHEN:MERGE":
+                    if i != len(toks) - 1:
+                        new_toks.append(toks[i] + '-' + toks[i + 1])
+                    else:
+                        new_toks.append(toks[i])
+                    i += 1
+                else:
+                    raise ValueError("Tag not recognized :" + tag)
+
+            j += 1
+        if args.out_tags:
+            with open(args.out_tags, 'a') as f:
+                if i != 0:
+                    f.write(' ')
+                f.write('|'.join((toks[i], tag)))
+                if tag == "$SPLIT":
+                    f.write('_' + new_toks[-2])
+                if (
+                    tag.startswith("$REPLACE") or
+                    tag == "$APPEND"
+                ):
+                    f.write('_' + new_toks[-1])
 
         i += 1
-
-    # logging.info(len(new_toks))
+    if args.out_tags:
+        with open(args.out_tags, 'a') as f:
+            f.write('\n')
     new_sentence = ' '.join(new_toks[:510])
     new_sentence = re.sub("' ", "'", new_sentence)
 
@@ -127,6 +382,94 @@ def apply_tags(
 
     return new_sentence
 
+# def apply_tags(
+#     sentence: str,
+#     tags,
+#     tokenizer: WordTokenizer,
+#     tagger: TagEncoder2,
+#     lexicon: Lexicon,
+#     args,
+# ):
+#
+#     toks = tokenizer.tokenize(sentence.rstrip('\n'), max_length=510)
+#
+#     if len(toks) != len(tags):
+#         logging.debug(len(toks))
+#         logging.debug(len(tags))
+#         toks, tags = toks[:len(tags)], tags[:len(toks)]
+#
+#     if args.out_tags:
+#         with open(args.out_tags, 'a') as f:
+#             f.write(' '.join(['|'.join(e) for e in zip(toks, tags)]) + '\n')
+#
+#     assert len(toks) == len(tags)
+#
+#     new_toks = list()
+#     i = 0
+#     while i < len(toks):
+#         tag = tags[i]
+#         if tag == '·':  # keep
+#             new_toks.append(toks[i])
+#         elif "$APPEND_" in tag:
+#             new_toks.append(toks[i])
+#             new_toks.append(tag[8:])
+#         elif tag == "$DELETE" or tag == "$COPY":
+#             pass
+#         elif tag == "$SWAP":
+#             if i != len(toks) - 1:
+#                 new_toks.append(toks[i + 1])
+#             new_toks.append(toks[i])
+#             i = i + 1
+#         elif tag == "$CASE:FIRST":
+#             if toks[i][0].isupper():
+#                 new_toks.append(toks[i][0].lower() + toks[i][1:])
+#             elif toks[i][0].islower():
+#                 new_toks.append(toks[i][0].upper() + toks[i][1:])
+#         elif tag == "$CASE:UPPER":
+#             new_toks.append(toks[i].upper())
+#         elif tag == "$CASE:LOWER":
+#             new_toks.append(toks[i].lower())
+#         elif tag == "$HYPHEN:SPLIT":
+#             for t in toks[i].split('-'):
+#                 new_toks.append(t)
+#         elif tag == "$MERGE":
+#             if i != len(toks) - 1:
+#                 new_toks.append(toks[i] + toks[i + 1])
+#             else:
+#                 new_toks.append(toks[i])
+#             i += 1
+#         elif tag == "$HYPHEN:MERGE":
+#             if i != len(toks) - 1:
+#                 new_toks.append(toks[i] + '-' + toks[i + 1])
+#             else:
+#                 new_toks.append(toks[i])
+#             i += 1
+#         elif tag.startswith("$REPLACE"):
+#             new_toks.append(tag.split('_')[-1])
+#         elif tag.startswith("$INFLECT:"):
+#             # new_toks.append(g_transform(toks[i], tag.split('_')[-1], lexicon))
+#             new_toks.append(toks[i]+"_inflected")
+#         elif tag.startswith("$SPLIT"):
+#             w = tag.split('_')[-1]
+#             if toks[i].startswith(w):
+#                 new_toks.append(w)
+#                 new_toks.append(toks[i][len(w):])
+#             else:
+#                 new_toks.append(toks[i])
+#         else:
+#             raise ValueError("Tag not recognized :" + tag)
+#
+#         i += 1
+#
+#     # logging.info(len(new_toks))
+#     new_sentence = ' '.join(new_toks[:510])
+#     new_sentence = re.sub("' ", "'", new_sentence)
+#
+#     # logging.info(new_sentence)
+#     # logging.info("**********************")
+#
+#     return new_sentence
+
 
 def infer(args):
 
@@ -134,16 +477,17 @@ def infer(args):
         args.tokenizer
     )
     word_tokenizer = WordTokenizer(FlaubertTokenizer)
-    lexicon = Lexicon(args.lex)
+    # lexicon = Lexicon(args.lex)
     tagger = TagEncoder2(
         path_to_lex=args.lex,
         path_to_voc=args.voc,
     )
+    lex = read_lexicon(args.lex, tagger.worder.word_to_id.keys())
 
     path_to_model = os.path.join(
         args.save_path,
         args.model_id,
-        "model_best.pt"
+        "model_best.pt",
     )
     model = GecBertVocModel(
         len(tagger),
@@ -156,7 +500,9 @@ def infer(args):
     device = "cuda:" + str(args.gpu_id) \
         if args.gpu and torch.cuda.is_available() else "cpu"
     if os.path.isfile(path_to_model):
-        state_dict = torch.load(path_to_model, map_location=torch.device(device))
+        state_dict = torch.load(
+            path_to_model, map_location=torch.device(device)
+        )
         model.load_state_dict(state_dict["model_state_dict"])
 
     else:
@@ -207,40 +553,36 @@ def infer(args):
             with torch.no_grad():
                 out = model(**toks)  # tag_out, attention_mask
                 for k, t in enumerate(batch_txt):
-                    tag_ids = out["tag_out"][k].argmax(-1)[out["attention_mask"][k].bool()]
-                    voc_ids = out["voc_out"][k].argmax(-1)[out["attention_mask"][k].bool()]
+                    # tag_ids = out["tag_out"][k].argmax(-1)[out["attention_mask"][k].bool()]
+                    # voc_ids = out["voc_out"][k].argmax(-1)[out["attention_mask"][k].bool()]
 
-                    tags = [tagger._id_to_tag[i.item()] for i in tag_ids]
-                    vocs = [tagger.worder.id_to_word[i.item()] for i in voc_ids]
+                    tag_out = out["tag_out"][k][out["attention_mask"][k].bool()]
+                    voc_out = out["voc_out"][k][out["attention_mask"][k].bool()]
 
-                    for i, tag in enumerate(tags):
-                        if tagger.is_radical_word_tag(tag):
-                            tags[i] = tag + '_' + vocs[i]
-                    logging.info('-' * 50)
-                    logging.info(batch_txt[k].rstrip('\n'))
-                    logging.info(' '.join(tags))
+                    tag_proposals = torch.argsort(
+                        tag_out, dim=-1, descending=True)
+                    voc_proposals = torch.argsort(
+                        voc_out, dim=-1, descending=True)
 
-                    batch_txt[k] = apply_tags(
+                    # tags = [tagger._id_to_tag[i.item()] for i in tag_ids]
+                    # vocs = [tagger.worder.id_to_word[i.item()] for i in voc_ids]
+
+                    # for i, tag in enumerate(tags):
+                    #     if tagger.is_radical_word_tag(tag):
+                    #         tags[i] = tag + '_' + vocs[i]
+                    # logging.info('-' * 50)
+                    # logging.info(batch_txt[k].rstrip('\n'))
+                    # logging.info(' '.join(tags))
+
+                    batch_txt[k] = apply_tags_with_constraint(
                         t,
-                        tags,
+                        tag_proposals,
+                        voc_out,
                         word_tokenizer,
                         tagger,
-                        lexicon,
+                        lex,
                         args,
                     )
-                    # logging.info(str(dec.long().cpu().numpy()))
-                    # yy = out["tag_out"][k][out["attention_mask"][k].bool()]
-                    # yy = torch.softmax(yy, -1)
-                    # jj = yy.topk(3, dim=-1).indices.cpu()
-                    # ii = torch.arange(
-                    #     jj.size(0)).unsqueeze(-1).expand(jj.shape)
-                    # logging.info(jj)
-                    # logging.info(yy[ii, jj])
-                    # for topk in range(3):
-                    #     logging.info(
-                    #         " ".join(
-                    #             tagger.id_to_tag(
-                    #                 tid.item()) for tid in jj[:, topk]))
         print('\n'.join(batch_txt))
 
 
