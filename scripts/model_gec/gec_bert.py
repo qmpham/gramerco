@@ -32,9 +32,10 @@ class GecBertModel(nn.Module):
         super(GecBertModel, self).__init__()
 
         self.tokenizer = (
-            tokenizer if tokenizer else FlaubertTokenizer.from_pretrained(encoder_name))
-        self.encoder = FlaubertModel.from_pretrained(
-            encoder_name)
+            tokenizer if tokenizer else
+            FlaubertTokenizer.from_pretrained(encoder_name)
+        )
+        self.encoder = FlaubertModel.from_pretrained(encoder_name)
         self.num_tag = num_tag
         h_size = self.encoder.attentions[0].out_lin.out_features
         self.linear_layer = nn.Linear(h_size, num_tag)

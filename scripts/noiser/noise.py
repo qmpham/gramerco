@@ -434,6 +434,7 @@ def read_lexicon(f, vocab):
     wrd2wrds_same_lemma = defaultdict(set)
     wrd2wrds_homophones = defaultdict(set)
     lempos2wrds = defaultdict(set)
+    lempos2wrdsinf = defaultdict(set)
     if not f:
         return wrd2wrds_same_lemma, wrd2wrds_homophones, lempos2wrds
 
@@ -442,7 +443,7 @@ def read_lexicon(f, vocab):
             toks = l.rstrip().split('\t')
             if len(toks) < 3:
                 continue
-            wrd, pho, lem, pos = toks[0], toks[1], toks[2], toks[3]
+            wrd, pho, lem, pos, gender, nbre, conj = toks[0], toks[1], toks[2], toks[3], toks[4], toks[5], toks[10]
             if wrd not in vocab:
                 continue
             if ' ' in wrd or ' ' in lem or ' ' in pho or ' ' in pos:
@@ -454,6 +455,7 @@ def read_lexicon(f, vocab):
             pho2wrd[pho].add(wrd)
             wrd2pho[wrd].add(pho)
             lempos2wrds[lem+separ+pos].add(wrd)
+            lempos2wrdsinf[lem+separ+pos].add((wrd, pos, gender, nbre, conj))
 
     for wrd in wrd2lem:
         for lem in wrd2lem[wrd]:

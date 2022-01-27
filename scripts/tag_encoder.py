@@ -364,8 +364,8 @@ class WordEncoder:
         path_to_voc="/nfs/RESEARCH/bouthors/projects/gramerco/resources/common/french.dic.20k",
     ):
         voc = read_vocab(path_to_voc)
-        self.id_to_word = defaultdict(default_keep_id)
-        self.word_to_id = defaultdict(default_empty)
+        self.id_to_word = {}
+        self.word_to_id = {}
         self._curr_cpt = 0
         for i, word in enumerate(voc):
             self.add_word(word)

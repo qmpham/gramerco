@@ -22,7 +22,7 @@ mkdir -p $SAVE_PATH/tensorboard
 CUDA_VISIBLE_DEVICES=0,1 \
 CUDA_LAUNCH_BLOCKING=1 \
 python infer_two.py \
-      --text "Je dans mon bendo" \
+      --text "flauvert a été entrainé avec des frases comme celles-ci" \
       --file $DATA_SRC \
       --log DEBUG \
       --save $SAVE_PATH \
