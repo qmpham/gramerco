@@ -1,0 +1,6 @@
+transformer
+pytorch==1.1
+spacy
+cupy
+matplotlib
+transformer
